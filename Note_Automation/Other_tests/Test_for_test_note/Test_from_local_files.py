@@ -24,7 +24,13 @@ class Test_from_local_files:
 
         self.public.import_file_bootstrap("选择文件即可创建笔记", "知道了")
 
-        self.import_file("笔记自动化测试文件","各种支持的文件格式")
+        while True:
+
+            self.import_file("笔记自动化测试文件","测试书籍")
+
+            self.method.xpath_text_click("存储/笔记自动化测试…/测试书籍")
+
+            self.method.xpath_text_click("存储/笔记自动化测试…")
 
 
     def test_create_notes_page(self,note_test_initial):
@@ -69,8 +75,6 @@ class Test_from_local_files:
 
         self.import_files_list()
 
-
-
     def import_files_list(self):
 
         page = 0
@@ -78,6 +82,8 @@ class Test_from_local_files:
         while True:
 
             page += 1
+
+            logging.info(f"Test:{page}")
 
             self.circular_swipe(page)
 
@@ -89,6 +95,8 @@ class Test_from_local_files:
 
             file_page = int(page_list[1])
 
+            file_page0 = int(page_list[0])
+
             # 获取当前文件数量
             file_lists = len(element)
 
@@ -99,7 +107,6 @@ class Test_from_local_files:
             # 打印当前列表数 和 文件数
             logging.info(f"当前列表 {page} , {file_lists} 个测试文档")
 
-            #
             self.file_list(element,page)
 
             if file_lists < 20:
@@ -168,22 +175,29 @@ class Test_from_local_files:
 
         return file_names
 
-
     def take_file(self,file_name):
 
         self.public.get_file(file_name)
 
-        parts = file_name.split(".")
+        # 查找最后一个小数点的位置
+        last_dot = file_name.rfind('.')
 
-        file_name1 = parts[0]
+        file_name1 = ""  # 小数点前的部分
+        file_name2 = ""  # 小数点后的部分
 
-        file_name2 = parts[1]
+        if last_dot != -1:
+            # 存在小数点时分割
+            file_name1 = file_name[:last_dot]
+            file_name2 = file_name[last_dot + 1:]
+
+        else:
+            # 不存在小数点时的处理
+            file_name1 = file_name  # 整个文件名作为前缀部分
 
         # 半小时为导出异常
-        self.method.by_take_pop("确认", f"类型： ({file_name2}) , 文档: ({file_name1}) , 导入耗时 ",1800)
+        self.method.by_take_pop("确认", f"类型:【{file_name2}】, 文档名称:【{file_name1}】, 导入耗时: ",1800)
 
         return file_name1
-
 
     def import_bake(self):
         self.method.by_element_click(By.ID, 'com.onyx.android.note:id/back_icon')

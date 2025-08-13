@@ -1,31 +1,40 @@
-import allure
-import logging
-import pytest
+from threading import Event
+from queue import Queue
+from threading import Lock
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.common.by import By
 from Note_Automation.Note_Class.Note_class import Operation_method
 from Note_Automation.config import driver
-from Note_Automation.conftest import get_device_info
 from pathlib import Path
-import time
-import PyPDF2
+from Note_Automation.Devices_list.Device_basic_information import Device_basic_information
+import allure
+import openpyxl
+import pytest
+import pypdf
 import subprocess
+import logging
+import time
 
-device_info = get_device_info()
-
+#获取设备基础信息
+devices = Device_basic_information()
+device_info = devices.get_device_info()
 if device_info:
-
     device_region = device_info.get('device_region')
 
 class Public_method:
 
     def __init__(self):
-    
+        self._result_queue = Queue()
+        self._logcat_thread = None
+        self._stop_event = Event()
+        self._lock = Lock()
         self.driver = driver
-
         self.method = Operation_method(self.driver)
 
-    # 创建一个手写笔记
+
     def create_handwritten_notes(self):
+        """ 创建手写笔记 """
 
         # 二级菜单中点击手写笔记
         self.method.xpath_text_click("手写笔记")
@@ -36,8 +45,8 @@ class Public_method:
         # 退出手写笔记
         self.method.by_element_click(By.ID, 'com.onyx.android.note:id/back_icon')
 
-    # 创建一个文本笔记
     def create_text_notes(self,prompt=None):
+        """ 创建文本笔记 """
 
         # 二级菜单中点击文本笔记
         self.method.xpath_text_click("文本笔记")
@@ -57,7 +66,6 @@ class Public_method:
 
             self.method.by_element_click(By.ID, 'com.onyx.android.note:id/quit')
 
-    # 文本笔记引导确认
     def text_note_guide(self , text_guide , text_guide_ok ):
         """ 确认首次进入文本笔记时出现的引导提示 """
 
@@ -71,8 +79,8 @@ class Public_method:
 
         self.method.xpath_text_click(text_guide_ok)
 
-    # 创建一个会议笔记
     def create_meeting_notes(self,prompt=None):
+        """ 创建会议笔记 """
 
         self.method.xpath_text_click("会议笔记")
 
@@ -86,6 +94,17 @@ class Public_method:
 
         self.method.by_element_click(By.ID, 'com.onyx.android.note:id/back_icon')
 
+    def create_boundless_notes(self):
+        """ 创建无界笔记 """
+
+        # 二级菜单中点击无界笔记
+        self.method.xpath_text_click("无边笔记")
+
+        # 手写笔记创建页面点击 创建
+        self.method.xpath_text_click("创建")
+
+        # 退出无界笔记
+        self.method.by_element_click(By.ID, 'com.onyx.android.note:id/back_icon')
 
     def meeting_note_guide(self, meeting_guide_1 , meeting_guide_2 , meeting_guide_ok):
         """ 确认首次进入会议笔记时出现的引导提示 """
@@ -93,35 +112,24 @@ class Public_method:
         try:
             self.method.xpath_text_click(meeting_guide_1,None)
             self.method.xpath_text_click(meeting_guide_ok,None)
-
         except Exception as e :
-
             logging.warning(f"会议笔记引导 {meeting_guide_1} 异常 {e}")
-
-
         try:
-
             self.method.click_slice(0.7,0.5 , 0.4, 0.5)
-
             self.method.xpath_text_click(meeting_guide_2,None)
-
         except Exception as e :
-
             logging.warning(f"会议笔记引导 {meeting_guide_2} 异常 {e}")
 
         # 关闭引导弹窗
         self.method.xpath_text_click(meeting_guide_ok)
 
-        # 校验文件夹弹窗
-
     def create_file(self):
+        """ 创建文件夹 """
 
         self.method.xpath_text_click("文件夹名称",None)
         self.method.xpath_text_click("文件夹-1",None)
         self.method.xpath_text_click("取消",None)
         self.method.xpath_text_click("确定")
-
-#--------------------------------------------------------------------------------------------------
 
     def create_notes(self,have_notes=None):
 
@@ -139,17 +147,15 @@ class Public_method:
 
         self.create_text_notes(have_notes)
 
-        # device_name, device_platform, device_region, devices_reader, device_size, driver_colour = get_device_info()
-
         if device_region == "国内":
 
             self.method.by_element_click(By.ID, "com.onyx:id/create_icon")
 
             self.create_meeting_notes(have_notes)
 
-
 # -------------------------------------------------------------------------------------------------
     def import_file(self, file_route_name, file_route_name2):
+
         # 本地文件找到指定文件夹
         self.get_file(file_route_name, file_route_name2)
 
@@ -190,7 +196,6 @@ class Public_method:
 
         return file_name1
 
-
     def import_bake(self):
 
         self.method.by_element_click(By.ID, 'com.onyx.android.note:id/back_icon')
@@ -216,12 +221,27 @@ class Public_method:
     def more_menus(self, more_options, function=None):
         """ 笔记首页更多菜单点击 """
 
-        self.method.by_parent_index_click(By.ID, "com.onyx:id/tool_layout", By.ID, "com.onyx:id/more_menu")
+        self.method.by_sub_index_click(By.ID, "com.onyx:id/tool_layout", By.ID, "com.onyx:id/more_menu")
 
         self.method.xpath_text_click(more_options)
 
         if function is not None:
-            self.method.xpath_text_click(function)
+
+            slide = 0
+            while slide < 3:
+                try:
+                    wait = WebDriverWait(self.driver, 3)
+                    element = wait.until(
+                        EC.element_to_be_clickable((By.XPATH, f'//*[@text="{function}"]'))
+                    )
+                    element.click()
+                    break
+                except:
+                    self.method.click_slice(0.5, 0.7, 0.5, 0.3)
+                    slide += 1
+
+            if slide == 3:
+                logging.info(f" 翻页后寻找 {slide} 次 , 未找到 {function} ")
 
 # ----------------------------------------------------------------------------------------------------
     def get_file(self , file_route_name , file_route_name2=None , file_route_name3=None):
@@ -240,7 +260,6 @@ class Public_method:
             file1 = self.method.xpath_text_click(file_route_name3)
             if not file1:
                 pytest.skip(f"未找到指定文件名为({file_route_name3})的测试文件，跳过当前用例")
-
 
     @staticmethod
     def get_pdf_info(pdf_path):
@@ -268,7 +287,7 @@ class Public_method:
 
                 # 获取 PDF 页面尺寸
                 with open(pdf_path, 'rb') as file:
-                    pdf_reader = PyPDF2.PdfReader(file)
+                    pdf_reader = pypdf.PdfReader(file)
                     # 获取第一页
                     first_page = pdf_reader.pages[0]
                     # 获取页面的宽度和高度，单位是点（points）
@@ -289,9 +308,11 @@ class Public_method:
         """""
         判断设备类型后执行不同操作，阅读器和平板元素定位方式不一样
         """""
-        device_info = get_device_info()
+        devices_info = devices.get_device_info()
+
         if device_info:
-            devices_reader = device_info.get('devices_reader')
+
+            devices_reader = devices_info.get('devices_reader')
 
             if devices_reader == "阅读器":
 
@@ -299,62 +320,95 @@ class Public_method:
 
             else:
 
-                self.method.by_parent_index_click(By.ID, "com.onyx:id/dock", By.ID, "com.onyx:id/imageView_cover_border", 2)
-
+                self.method.by_sub_index_click(By.ID, "com.onyx:id/dock", By.ID, "com.onyx:id/imageView_cover_border", 2)
 
 # --------------------------------------------------------------------------------------
 
-    def capture_logcat(self, target_log, test_page, timeout=90):
-        subprocess.run(['adb', 'logcat', '-c'])  # 清理旧日志
-        start_time = time.time()
+    def shape_test(self , uid , shape_type=None, width=None, pressure=None, color=None, line_style=None, count=None, point=None):
+        # 完整shape生成命令
+        cmd = f'adb -s {uid} shell am broadcast -a com.onyx.android.note.test.add_custom_shape '\
+              + '--ei test_shape_type_index %s ' % shape_type\
+              + '--es test_shape_pressure "%s" ' % pressure \
+              + '--ei test_shape_line_style_index %s ' % line_style\
+              + '--es test_shape_stroke_width %s ' % width\
+              + '--ei test_shape_color_index %s ' % color\
+              + '--ei test_shape_count %s ' % count\
+              + '--es test_shape_start_end_point %s ' % point\
+              + '--ez test_shape_draw_line_path true'
+        print(cmd)
+        process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        stdout, stderr = process.communicate()
+        exit_code = process.wait()
 
-        # 使用 with 语句确保进程资源自动释放
-        with subprocess.Popen(
-                ['adb', 'logcat'],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                encoding='utf-8'
-        ) as process:
+        # 打印输出和退出码
+        print(f'Exit Code: {exit_code}\nOutput:\n{stdout}\nError:\n{stderr}')
 
-            try:
-                for line in process.stdout:
-                    current_time = time.time()
-                    if current_time - start_time > timeout:
-                        logging.info(f"{test_page} 在 {timeout} 秒内未获取到渲染日志。")
-                        process.terminate()
-                        process.wait()
-                        return False
+    def get_screen_size(self ,uid):
+        # 获取设备尺寸
+        cmd = f'adb -s {uid} shell wm size'
+        process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        stdout, stderr = process.communicate()
+        # exit_code = process.wait()
+        # print(f'Exit Code: {exit_code}\nOutput:\n{stdout}\nError:\n{stderr}')
+        size = stdout.decode('utf-8').split()
+        w_and_h = size[2].split('x')
 
-                    if target_log in line:
-                        number_str = line.split(target_log)[1].strip()
-                        parts = number_str.strip().split("--->")
-                        # logging.info(f"ceshi 1 {parts}")
+        width = w_and_h[0]
+        height = w_and_h[1]
+        # print(w_and_h, width, height)
+        return int(width), int(height)
 
-                        render, render_time = parts
-                        # logging.info(f"ceshi 2 {render}")
-                        # logging.info(f"ceshi 2 {render_time}")
+    def start_end_point(self ,width, height, x1=50,):
+        start_x = x1
+        end_x = width - 100
+        start_y = 0
+        end_y = 50
+        height = height
 
-                        if not render:
-                            logging.info(f"{test_page} ：{render_time}")
-                            process.terminate()
-                            process.wait()
-                            return True
+        def new_point():
+            nonlocal start_y, end_y
+            new_start_y = start_y + 50
+            new_end_y = end_y + 50
+            if new_start_y > height:
+                start_y = 0
+                end_y = 0
+            else:
+                start_y = new_start_y
+                end_y = new_end_y
+            return f'{start_x},{start_y},{end_x},{end_y}'
 
-                        elif render == 0:
-                            logging.info(f"渲染数据为 0 异常")
-                            return False
+        return new_point
 
-                        else:
-                            logging.info(f"{test_page} ：{render_time}")
+    def read_excel(self ,filepath, sheetname: str):
+        """
+        读取excel中指定sheet
+        :param filepath: excel表位置
+        :param sheetname: 要读取的表名
+        :return: 表数据
+        """
+        workbook = openpyxl.load_workbook(filepath)
+        worksheet = workbook[sheetname]
+        data = []
+        for row in worksheet.iter_rows(min_row=2, min_col=1, values_only=True):
+            # print(row)
+            data.append(row)
+        return data
 
-                        process.terminate()
-                        process.wait()
-                        return True
-
-
-            except Exception as e:
-                logging.error(f"捕获日志时发生异常: {e}")
-                process.terminate()  # 异常时强制终止进程
-                process.wait()  # 等待进程结束
-                return False
+    def create_shape(self,uid):
+        width, height = self.get_screen_size(uid)
+        get_point = self.start_end_point(width, height)
+        test_data_list = self.read_excel('/Users/xiaoyu/Downloads/shapeTestdata.xlsx', 'Sheet2')
+        # 获取参数
+        for i, data in enumerate(test_data_list):
+            point = get_point()
+            test_data = data + (point,)
+            print(test_data)
+            if int(point.split(',')[-1]) == 0:
+                cmd = f'adb -s {uid} shell am broadcast -a com.onyx.android.note.test.change_page --ez test_next_page true'
+                subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                print('next page')
+                time.sleep(1)
+                self.shape_test(uid, *test_data)
+            else:
+                self.shape_test(uid, *test_data)
+            time.sleep(3)

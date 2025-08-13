@@ -1,29 +1,75 @@
-import allure
-import logging
+from Note_Automation.Devices_list.Device_basic_information import Device_basic_information
 from selenium.webdriver.common.by import By
+from selenium.webdriver.support.wait import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 from Note_Automation.Note_Class.Note_class import Operation_method
 from Note_Automation.Test_local_notes.Public_method import Public_method
 from Note_Automation.config import driver
-from Note_Automation.conftest import note_mark_china, get_device_info, note_mark_increment, note_mark_full_amount
+from Note_Automation.conftest import note_mark_china, note_mark_increment, note_mark_full_amount
+import allure
+import logging
+import pytest
+
+
+
 
 #获取设备基础信息
-# device_name , device_platform, device_region, devices_reader , device_size , driver_colour = get_device_info()
-
-device_info = get_device_info()
-
+devices = Device_basic_information()
+device_info = devices.get_device_info()
 if device_info:
-
     device_region = device_info.get('device_region')
 
+
 @allure.feature("笔记常规菜单测试类")
+@pytest.mark.usefixtures("note_test_initial")
 class Test_general_menu:
 
     def setup_method(self):
         self.driver = driver
-
         self.method = Operation_method(self.driver)
-
         self.public = Public_method()
+
+    @note_mark_china("常规菜单功能确认")
+    @note_mark_increment("增量")
+    def test_12_general_menu_delete_notes(self, note_test_initial):
+        """ """
+        # 平板桌面 点击笔记应用
+        self.method.xpath_text_click("笔记")
+
+        self.method.xpath_text_click("创建笔记")
+
+        # 创建手写笔记
+        self.public.create_handwritten_notes()
+
+        #有笔记状态点击创建
+        self.method.by_element_click(By.ID, "com.onyx:id/create_icon")
+
+        # 创建文本笔记
+        self.public.create_text_notes()
+
+        # 创建会议笔记
+        if device_region == "国内" :
+
+            # 有笔记状态点击创建
+            self.method.by_element_click(By.ID, "com.onyx:id/create_icon")
+
+            # 创建一个会议笔记
+            self.public.create_meeting_notes()
+
+        else:
+
+            logging.info("海外设备无会议笔记")
+
+        self.method.wait_for_press_name(By.ID, "com.onyx:id/title", "笔记-1")
+
+        self.attribute_guide("笔记属性信息已收纳至【属性与安全】模块下的【属性】")
+
+        # 对比内容是否缺少
+
+        self.method.wait_for_press_name(By.ID, "com.onyx:id/title", "文本-1")
+
+        # 对比内容是否缺少
+
 
     @note_mark_china("常规菜单删除笔记")
     @note_mark_increment("增量")
@@ -55,21 +101,25 @@ class Test_general_menu:
             # 创建一个会议笔记
             self.public.create_meeting_notes()
 
-            self.method.wait_for_press_name(By.ID, "com.onyx:id/title" , "会议-1")
-
-            self.general_delete()
-
         else:
 
             logging.info("海外设备无会议笔记")
 
         self.method.wait_for_press_name(By.ID, "com.onyx:id/title", "笔记-1")
 
+        self.attribute_guide("笔记属性信息已收纳至【属性与安全】模块下的【属性】")
+
         self.general_delete()
 
         self.method.wait_for_press_name(By.ID, "com.onyx:id/title", "文本-1")
 
         self.general_delete()
+
+        if device_region == "国内":
+
+            self.method.wait_for_press_name(By.ID, "com.onyx:id/title", "会议-1")
+
+            self.general_delete()
 
         self.public.more_menus("回收站")
 
@@ -80,10 +130,6 @@ class Test_general_menu:
         if device_region == "国内" :
             # 校验回收站内是否有会议笔记
             self.method.xpath_text_click("会议-1",None)
-
-        else:
-            # 跳过 --- 会议笔记相关操作
-            logging.info("海外设备无会议笔记未删除会议笔记")
 
         self.method.xpath_text_click("清空")
 
@@ -133,12 +179,10 @@ class Test_general_menu:
             # 创建一个会议笔记
             self.public.create_meeting_notes()
 
-        else:
-
-            logging.info("海外设备无会议笔记")
-
         # 长按手写笔记
         self.method.wait_for_press_name(By.ID, "com.onyx:id/title", "笔记-1")
+
+        self.attribute_guide("笔记属性信息已收纳至【属性与安全】模块下的【属性】")
 
         # 移动手写笔记至指定文件路径
         self.general_move("文件夹-1")
@@ -156,10 +200,6 @@ class Test_general_menu:
             # 移动会议笔记至指定文件路径
             self.general_move("文件夹-1")
 
-        else:
-
-            # 跳过 --- 会议笔记相关操作
-            logging.info("海外设备无会议笔记不移动会议笔记")
 
         # 长按文件夹笔记
         self.method.wait_for_press_name(By.ID, "com.onyx:id/title", "文件夹-1")
@@ -218,21 +258,22 @@ class Test_general_menu:
             # 创建一个会议笔记
             self.public.create_meeting_notes()
 
-            self.method.wait_for_press_name(By.ID, "com.onyx:id/title", "会议-1")
-
-            self.general_copy()
-
-        else:
-
-            logging.info("海外设备无会议笔记")
 
         self.method.wait_for_press_name(By.ID, "com.onyx:id/title", "笔记-1")
+
+        self.attribute_guide("笔记属性信息已收纳至【属性与安全】模块下的【属性】")
 
         self.general_copy()
 
         self.method.wait_for_press_name(By.ID, "com.onyx:id/title", "文本-1")
 
         self.general_copy()
+
+        if device_region == "国内":
+
+            self.method.wait_for_press_name(By.ID, "com.onyx:id/title", "会议-1")
+
+            self.general_copy()
 
         # 校验复制的手写笔记
         self.method.xpath_text_click("笔记-1(1)",None)
@@ -253,10 +294,6 @@ class Test_general_menu:
 
             # 校验复制的会议笔记是否还存在
             self.method.xpath_text_click("会议-1",None)
-
-        else:
-            # 跳过 --- 会议笔记相关操作
-            logging.info("海外设备无会议笔记未复制会议笔记")
 
     @note_mark_china("常规菜单重命名笔记")
     @note_mark_increment("增量")
@@ -284,7 +321,7 @@ class Test_general_menu:
         self.public.create_text_notes()
 
         # 点击更多菜单
-        self.method.by_parent_index_click(By.ID, "com.onyx:id/tool_layout", By.ID, "com.onyx:id/more_menu")
+        self.method.by_sub_index_click(By.ID, "com.onyx:id/tool_layout", By.ID, "com.onyx:id/more_menu")
 
         # 点击新建文件夹
         self.method.xpath_text_click("新建文件夹")
@@ -304,21 +341,21 @@ class Test_general_menu:
             # 创建一个会议笔记
             self.public.create_meeting_notes()
 
-            self.method.wait_for_press_name(By.ID, "com.onyx:id/title", "会议-1")
-
-            self.general_rename(meeting_name)
-
-        else:
-
-            logging.info("海外设备无会议笔记")
-
         self.method.wait_for_press_name(By.ID, "com.onyx:id/title", "笔记-1")
+
+        self.attribute_guide("笔记属性信息已收纳至【属性与安全】模块下的【属性】")
 
         self.general_rename(handwritten_name)
 
         self.method.wait_for_press_name(By.ID, "com.onyx:id/title", "文本-1")
 
         self.general_rename(text_name)
+
+        if device_region == "国内":
+
+            self.method.wait_for_press_name(By.ID, "com.onyx:id/title", "会议-1")
+
+            self.general_rename(meeting_name)
 
         self.method.wait_for_press_name(By.ID, "com.onyx:id/title", "文件夹-1")
 
@@ -368,15 +405,9 @@ class Test_general_menu:
             # 创建一个会议笔记
             self.public.create_meeting_notes()
 
-            self.method.wait_for_press_name(By.ID, "com.onyx:id/title", "会议-1")
-
-            self.general_collection()
-
-        else:
-
-            logging.info("海外设备无会议笔记")
-
         self.method.wait_for_press_name(By.ID, "com.onyx:id/title", "笔记-1")
+
+        self.attribute_guide("笔记属性信息已收纳至【属性与安全】模块下的【属性】")
 
         self.general_collection()
 
@@ -384,7 +415,13 @@ class Test_general_menu:
 
         self.general_collection()
 
-        self.method.by_parent_index_click(By.ID, "com.onyx:id/tool", By.CLASS_NAME, "android.widget.ImageView", 2)
+        if device_region == "国内":
+
+            self.method.wait_for_press_name(By.ID, "com.onyx:id/title", "会议-1")
+
+            self.general_collection()
+
+        self.method.by_sub_index_click(By.ID, "com.onyx:id/tool", By.CLASS_NAME, "android.widget.ImageView", 2)
 
         self.method.xpath_text_click("笔记-1",None)
 
@@ -394,10 +431,20 @@ class Test_general_menu:
 
             self.method.xpath_text_click("会议-1",None)
 
-        else:
-            # 跳过 --- 会议笔记相关操作
-            logging.info("海外设备无会议笔记未收藏会议笔记")
 
+
+    def attribute_guide(self,guide):
+
+        try:
+            wait = WebDriverWait(self.driver, 3)
+            element = wait.until(
+                EC.element_to_be_clickable((By.XPATH, f'//*[@text="{guide}"]'))
+            )
+
+            if element:
+                self.method.xpath_text_click("知道了")
+        except:
+            logging.info("属性引导-已跳过")
 
 
     def create_notes(self):

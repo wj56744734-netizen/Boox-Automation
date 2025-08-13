@@ -1,4 +1,3 @@
-import logging
 import os
 import allure
 from selenium.webdriver.common.by import By
@@ -6,11 +5,12 @@ from Note_Automation.Other_tests.Note_page_contrast.OpenCV import OpenCV
 from Note_Automation.Note_Class.Note_class import Operation_method
 from Note_Automation.Test_local_notes.Public_method import Public_method
 from Note_Automation.config import driver
-from Note_Automation.conftest import get_device_info
+from Note_Automation.Devices_list.Device_basic_information import Device_basic_information
+
 
 #获取设备基础信息
-device_info = get_device_info()
-
+devices = Device_basic_information()
+device_info = devices.get_device_info()
 device_size = device_info.get("device_size")
 
 @allure.feature("笔记默认页面校验类")
@@ -24,7 +24,7 @@ class Test_page:
 
         self.public = Public_method()
 
-        self.OpenCV = OpenCV
+        self.OpenCV = OpenCV()
 
     # @note_mark_china("笔记首页默认状态校验")
     def test_heck_the_inside_of_the_notes(self , note_test_initial):
@@ -38,17 +38,17 @@ class Test_page:
         self.screenshot_contrast("Local Notes",device_size)
 
         # 点击切换关联文档笔记
-        self.method.by_parent_index_click(By.ID, "com.onyx:id/tool", By.CLASS_NAME, "android.widget.ImageView", True,1)
+        self.method.by_sub_index_click(By.ID, "com.onyx:id/tool", By.CLASS_NAME, "android.widget.ImageView", True, 1)
 
         self.screenshot_contrast("Associated Notes",device_size)
 
         # # 点击切换收藏笔记
-        self.method.by_parent_index_click(By.ID, "com.onyx:id/tool", By.CLASS_NAME, "android.widget.ImageView", True, 2)
+        self.method.by_sub_index_click(By.ID, "com.onyx:id/tool", By.CLASS_NAME, "android.widget.ImageView", True, 2)
 
         self.screenshot_contrast("Favorite Notes",device_size)
 
         # # 无笔记未登记 点击切换最近笔记
-        self.method.by_parent_index_click(By.ID, "com.onyx:id/tool", By.CLASS_NAME, "android.widget.ImageView", True, 3)
+        self.method.by_sub_index_click(By.ID, "com.onyx:id/tool", By.CLASS_NAME, "android.widget.ImageView", True, 3)
 
         self.screenshot_contrast("Recent Notes",device_size)
 

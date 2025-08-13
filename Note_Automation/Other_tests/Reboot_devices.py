@@ -144,7 +144,7 @@ class DeviceReboot:
 
         try:
             note_element = WebDriverWait(self.driver, 60).until(
-                EC.visibility_of_element_located((By.ID,'com.onyx:id/function_icon'))
+                EC.visibility_of_element_located((By.ID,'com.onyx:id/name'))
             )
             if note_element:
                 print(f"===== 设备未白屏，继续测试 =====")

@@ -14,11 +14,9 @@ def handle_permission_error(operation, path, error):
     logging.error(f"{operation} {path} 时权限不足: {error}")
     return None
 
-
 def handle_io_error(operation, path, error):
     logging.error(f"{operation} {path} 时出现 I/O 错误: {error}")
     return None
-
 
 def handle_general_error(operation, error):
     logging.error(f"{operation} 时出现错误: {error}")
@@ -285,18 +283,18 @@ class OpenCV:
             return handle_general_error("截图", e)
 
 
-# if __name__ == '__main__':
-#     script_dir = os.path.dirname(os.path.abspath(__file__))
-#     # 替换为实际图片路径
-#     pic1 = os.path.join(script_dir, "Page/7/Notes_home/Associated Notes.png")
-#     pic2 = os.path.join(script_dir, "Page_screenshot/7/Notes_home/Associated Notes.png")
-#     result_path = os.path.join(script_dir, "exception_page/result.png")
-#
-#     comparator = Picture()
-#
-#     # 运行图片比较
-#     result = comparator.compare_pictures(pic1, pic2, result_path)
-#     if result == 0:
-#         logging.info(f"图片比较完成，结果已保存至: {result_path}")
-#     else:
-#         logging.error("图片比较失败")
+if __name__ == '__main__':
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    # 替换为实际图片路径
+    pic1 = os.path.join(script_dir, "Page/7/Notes_home/Associated Notes.png")
+    pic2 = os.path.join(script_dir, "Page_screenshot/7/Notes_home/Associated Notes.png")
+    result_path = os.path.join(script_dir, "exception_page/result.png")
+
+    comparator = OpenCV()
+
+    # 运行图片比较
+    result = comparator.compare_pictures(pic1, pic2, result_path)
+    if result == 0:
+        logging.info(f"图片比较完成，结果已保存至: {result_path}")
+    else:
+        logging.error("图片比较失败")

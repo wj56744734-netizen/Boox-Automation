@@ -1,30 +1,28 @@
+from Note_Automation.Note_Class.Note_class import Operation_method
+from Note_Automation.Test_local_notes.Public_method import Public_method
+from Note_Automation.Devices_list.Device_basic_information import Device_basic_information
+from Note_Automation.conftest import note_mark_china, note_mark_increment, note_mark_full_amount
+from Note_Automation.config import driver
+from selenium.webdriver.common.by import By
 import allure
 import logging
 import pytest
-from selenium.webdriver.common.by import By
-from Note_Automation.Note_Class.Note_class import Operation_method
-from Note_Automation.Test_local_notes.Public_method import Public_method
-from Note_Automation.config import driver
-from Note_Automation.conftest import note_mark_china, get_device_info, note_mark_increment, note_mark_full_amount
+
+
+
 
 #获取设备基础信息
-# device_name , device_platform, device_region, devices_reader , device_size , driver_colour = get_device_info()
-
-device_info = get_device_info()
-
+devices = Device_basic_information()
+device_info = devices.get_device_info()
 if device_info:
-
     device_region = device_info.get('device_region')
 
 @allure.feature("笔记导入、导出文件相关测试类")
 class Test_import_the_file:
 
     def setup_method(self):
-
         self.driver = driver
-
         self.method = Operation_method(self.driver)
-
         self.public = Public_method()
 
     @note_mark_china("从本地文件创建笔记")
@@ -71,28 +69,28 @@ class Test_import_the_file:
         self.method.by_pop_time(By.ID, "com.onyx.android.note:id/progress", 180, "导入笔记超时")
 
         # 笔记导入成功后 返回设备主页
-        driver.press_keycode(3)
+        self.driver.press_keycode(3)
 
         # 平板桌面 点击笔记应用平板桌面 点击笔记应用
         self.method.xpath_text_click("笔记")
 
         # 笔记首页点击 搜索
-        self.method.by_parent_index_click(By.ID, "com.onyx:id/tool_layout", By.CLASS_NAME, "android.widget.LinearLayout",1)
+        self.method.by_sub_index_click(By.ID, "com.onyx:id/tool_layout", By.CLASS_NAME, "android.widget.LinearLayout", 1)
 
         # 搜索页面 搜索条件校准
         self.search_page_element()
 
         # 搜索页面 点击标签，保留标题
-        self.method.by_parent_index_click(By.ID, "com.onyx:id/search_option", By.ID, "com.onyx:id/tag_checkbox")
+        self.method.by_sub_index_click(By.ID, "com.onyx:id/search_option", By.ID, "com.onyx:id/tag_checkbox")
 
         # 输入测试数据 ， 校验结果
         self.search_title("笔记-1","总计： 1","标题")
 
         # 搜索页面 点击手写
-        self.method.by_parent_index_click(By.ID, "com.onyx:id/search_option", By.ID, "com.onyx:id/scribble_checkbox")
+        self.method.by_sub_index_click(By.ID, "com.onyx:id/search_option", By.ID, "com.onyx:id/scribble_checkbox")
 
         # 搜索页面 点击标题 取消搜索标题
-        self.method.by_parent_index_click(By.ID, "com.onyx:id/search_option", By.ID, "com.onyx:id/title_checkbox")
+        self.method.by_sub_index_click(By.ID, "com.onyx:id/search_option", By.ID, "com.onyx:id/title_checkbox")
 
         self.search_title("A", "总计： 2","手写")
 
@@ -101,10 +99,10 @@ class Test_import_the_file:
         self.search_title("123", "总计： 2","手写")
 
         # 搜索页面 点击文本
-        self.method.by_parent_index_click(By.ID, "com.onyx:id/search_option", By.ID, "com.onyx:id/text_checkbox")
+        self.method.by_sub_index_click(By.ID, "com.onyx:id/search_option", By.ID, "com.onyx:id/text_checkbox")
 
         # 搜索页面 点击手写 取消搜索手写
-        self.method.by_parent_index_click(By.ID, "com.onyx:id/search_option", By.ID, "com.onyx:id/scribble_checkbox")
+        self.method.by_sub_index_click(By.ID, "com.onyx:id/search_option", By.ID, "com.onyx:id/scribble_checkbox")
 
         self.search_title("A", "总计： 1","文本")
 
@@ -113,10 +111,10 @@ class Test_import_the_file:
         self.search_title("123", "总计： 1","文本")
 
         # 搜索页面 点击标签
-        self.method.by_parent_index_click(By.ID, "com.onyx:id/search_option", By.ID, "com.onyx:id/tag_checkbox")
+        self.method.by_sub_index_click(By.ID, "com.onyx:id/search_option", By.ID, "com.onyx:id/tag_checkbox")
 
         # 搜索页面 点击文本 取消搜索文本
-        self.method.by_parent_index_click(By.ID, "com.onyx:id/search_option", By.ID, "com.onyx:id/text_checkbox")
+        self.method.by_sub_index_click(By.ID, "com.onyx:id/search_option", By.ID, "com.onyx:id/text_checkbox")
 
         self.search_title("A", "总计： 1","标签")
 
@@ -178,13 +176,13 @@ class Test_import_the_file:
 
         self.method.xpath_text_click("笔记")
 
-        self.public.more_menus("选项设置", "备份与恢复")
+        self.public.more_menus("笔记设置", "备份与恢复")
 
         # 备份文件-点击恢复
         self.backup_recover("本地笔记： 目录 1 / 笔记 1","关联文档笔记： 目录 0 / 笔记 1")
 
         # 无笔记未登记 点击本地笔记
-        self.method.by_parent_index_click(By.ID, "com.onyx:id/tool", By.CLASS_NAME, "android.widget.ImageView", 0)
+        self.method.by_sub_index_click(By.ID, "com.onyx:id/tool", By.CLASS_NAME, "android.widget.ImageView", 0)
 
         # 有笔记 点击创建笔记
         self.method.by_element_click(By.ID, "com.onyx:id/create_icon")
@@ -306,11 +304,11 @@ class Test_import_the_file:
         备份文件-点击恢复 ， 校验恢复的本地笔记和关联文档笔记
         """""
 
-        self.method.by_parent_index_click(By.ID, "com.onyx:id/page", By.CLASS_NAME, "android.widget.TextView",note_guide)
+        self.method.by_sub_index_click(By.ID, "com.onyx:id/page", By.CLASS_NAME, "android.widget.TextView", note_guide)
 
-        self.method.by_parent_index_click(By.ID, "com.onyx:id/tool", By.CLASS_NAME, "android.widget.ImageView", 1)
+        self.method.by_sub_index_click(By.ID, "com.onyx:id/tool", By.CLASS_NAME, "android.widget.ImageView", 1)
 
-        self.method.by_parent_index_click(By.ID, "com.onyx:id/page", By.CLASS_NAME, "android.widget.TextView",file_guide)
+        self.method.by_sub_index_click(By.ID, "com.onyx:id/page", By.CLASS_NAME, "android.widget.TextView", file_guide)
 
     def backup_addition(self):
         """""
@@ -326,7 +324,6 @@ class Test_import_the_file:
         # 备份文件-点击恢复
         self.backup_recover("本地笔记： 目录 2 / 笔记 4","关联文档笔记： 目录 0 / 笔记 2")
 
-
 # --------------------------------------------------------------------------------------
     # 笔记搜索页面校验各种搜索条件是否缺失
 
@@ -335,14 +332,14 @@ class Test_import_the_file:
         笔记搜索页面校验各种搜索条件是否缺失
         """""
         # 搜索页面 点击标题
-        self.method.by_parent_index_click(By.ID, "com.onyx:id/search_option", By.ID, "com.onyx:id/title_checkbox",0,should_click=False)
+        self.method.by_sub_index_click(By.ID, "com.onyx:id/search_option", By.ID, "com.onyx:id/title_checkbox", 0, should_click=None)
 
-        self.method.by_parent_index_click(By.ID, "com.onyx:id/search_option", By.ID, "com.onyx:id/scribble_checkbox",0,should_click=False)
+        self.method.by_sub_index_click(By.ID, "com.onyx:id/search_option", By.ID, "com.onyx:id/scribble_checkbox", 0, should_click=None)
 
-        self.method.by_parent_index_click(By.ID, "com.onyx:id/search_option", By.ID, "com.onyx:id/text_checkbox",0,should_click=False )
+        self.method.by_sub_index_click(By.ID, "com.onyx:id/search_option", By.ID, "com.onyx:id/text_checkbox", 0, should_click=None)
 
-        self.method.by_parent_index_click(By.ID, "com.onyx:id/search_option", By.ID, "com.onyx:id/tag_checkbox",0,should_click=False )
+        self.method.by_sub_index_click(By.ID, "com.onyx:id/search_option", By.ID, "com.onyx:id/tag_checkbox", 0, should_click=None)
 
-        self.method.by_parent_index_click(By.ID, "com.onyx:id/search_option", By.ID, "com.onyx:id/all_library_checkbox",0,should_click=False )
+        self.method.by_sub_index_click(By.ID, "com.onyx:id/search_option", By.ID, "com.onyx:id/all_library_checkbox", 0, should_click=None)
 
 
