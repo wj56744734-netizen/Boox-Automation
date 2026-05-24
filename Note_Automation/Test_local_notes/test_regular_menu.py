@@ -2,7 +2,7 @@ from Note_Automation.Devices_list.Device_basic_information import Device_basic_i
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from Note_Automation.Note_Class.Note_class import Operation_method
+from Note_Automation.Note_class.Note_class import Operation_method
 from Note_Automation.Test_local_notes.Public_method import Public_method
 from Note_Automation.config import driver
 from Note_Automation.conftest import note_mark_china, note_mark_increment, note_mark_full_amount
@@ -15,11 +15,11 @@ import pytest
 
 #获取设备基础信息
 devices = Device_basic_information()
-device_info = devices.get_device_info()
-if device_info:
-    device_region = device_info.get('device_region')
-
-
+try:
+    device_info = devices.get_device_info()
+except RuntimeError:
+    device_info = None
+device_region = device_info.get('device_region') if device_info else None
 @allure.feature("笔记常规菜单测试类")
 @pytest.mark.usefixtures("note_test_initial")
 class Test_general_menu:

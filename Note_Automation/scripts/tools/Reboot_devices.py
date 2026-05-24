@@ -5,6 +5,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from appium import webdriver
+from Note_Automation.Devices_list.Device_basic_information import Device_basic_information
 
 
 class DeviceReboot:
@@ -13,6 +14,7 @@ class DeviceReboot:
         self.appium_server = appium_server
         self.driver = None
         self.reboot_count = 0  # 记录重启次数
+        self.device_id = Device_basic_information().get_connected_device_ids()
 
     def _init_driver(self):
         """初始化Appium驱动"""
@@ -20,6 +22,7 @@ class DeviceReboot:
         desired_caps = {
             'platformName': 'Android',
             'deviceName': 'Android Device',
+            'udid': self.device_id,
             'automationName': 'UiAutomator2',
             'newCommandTimeout': 300,  # 延长命令超时时间
             'noReset': True,  # 不重置应用状态
@@ -56,7 +59,7 @@ class DeviceReboot:
 
             # 执行ADB重启命令
             subprocess.run(
-                ['adb', 'reboot'],
+                ['adb', '-s', self.device_id, 'reboot'],
                 check=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
@@ -101,7 +104,7 @@ class DeviceReboot:
         for attempt in range(max_attempts):
             try:
                 result = subprocess.run(
-                    ['adb', 'get-state'],
+                    ['adb', '-s', self.device_id, 'get-state'],
                     check=True,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
@@ -121,7 +124,7 @@ class DeviceReboot:
         for attempt in range(max_attempts):
             try:
                 result = subprocess.run(
-                    ['adb', 'shell', 'getprop', 'sys.boot_completed'],
+                    ['adb', '-s', self.device_id, 'shell', 'getprop', 'sys.boot_completed'],
                     check=True,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
@@ -151,17 +154,18 @@ class DeviceReboot:
 
         except Exception as e:
                 print(f"进入系统KCB桌面异常")
-                subprocess.run(["adb", "screencap", "-p", "/Users/xiaoyu/Downloads/1.png"])
-                subprocess.run(["adb", "logcat", "-d", ">", "/Users/xiaoyu/Downloads/log.txt"])
+                subprocess.run(["adb", "-s", self.device_id, "screencap", "-p", "/Users/xiaoyu/Downloads/1.png"])
+                with open("/Users/xiaoyu/Downloads/log.txt", "w") as f:
+                    subprocess.run(["adb", "-s", self.device_id, "logcat", "-d"], stdout=f)
                 return False
 
         try:
             # 防止monkey关闭usb调试
             time.sleep(3)
-            usb = subprocess.run(["adb" , "shell" , "service" , "call" , "adb" , "16" , "i32" , "1"],check=True)
+            usb = subprocess.run(["adb", "-s", self.device_id, "shell", "service", "call", "adb", "16", "i32", "1"], check=True)
 
             if usb:
-                monkey = subprocess.run(["adb" , "shell" , "monkey" , "-p" , "com.onyx" , "10000"],check=True)
+                monkey = subprocess.run(["adb", "-s", self.device_id, "shell", "monkey", "-p", "com.onyx", "10000"], check=True)
 
                 if monkey:
                     print(f"===== 第 {self.reboot_count} 次执行 monkey 成功 =====")

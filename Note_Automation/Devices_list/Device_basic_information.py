@@ -2,9 +2,12 @@ import logging
 import re
 import subprocess
 import time
+import os
 from Note_Automation.Devices_list.Devices_list import device_list
 
 _CACHED_DEVICE_ID = None
+_Fingerprint_information = None
+_Version_Information = None
 
 class Device_basic_information:
 
@@ -13,13 +16,12 @@ class Device_basic_information:
 
         global _CACHED_DEVICE_ID
 
-        logging.debug(f"当前模块缓存的设备ID: {_CACHED_DEVICE_ID}")
+        logging.debug(f"当前模块缓存设备ID: {_CACHED_DEVICE_ID}")
 
         if _CACHED_DEVICE_ID is not None:
 
             return _CACHED_DEVICE_ID
 
-        # 第一次获取设备ID（原逻辑不变）
         try:
             result = subprocess.run(
                 ['adb', 'devices'],
@@ -31,8 +33,17 @@ class Device_basic_information:
             lines = output.splitlines()
             device_ids = [line.split()[0] for line in lines[1:] if line.strip()]
             if not device_ids:
-                logging.error("未连接任何设备")
-                exit(1)
+                raise RuntimeError("未连接任何设备")
+
+            # 支持外部显式指定设备ID（用于多进程/子进程保持同一设备）
+            expected_device_id = os.getenv("NOTE_DEVICE_ID", "").strip()
+            if expected_device_id:
+                if expected_device_id in device_ids:
+                    _CACHED_DEVICE_ID = expected_device_id
+                    logging.info(f"使用环境变量指定设备ID: {_CACHED_DEVICE_ID}")
+                    return _CACHED_DEVICE_ID
+                raise RuntimeError(f"环境变量 NOTE_DEVICE_ID={expected_device_id} 未在当前连接设备中")
+
             # 多设备场景取第一个设备
             if len(device_ids) >= 2:
                 device_id = device_ids[0]
@@ -48,24 +59,45 @@ class Device_basic_information:
             _CACHED_DEVICE_ID = device_ids[0]
             logging.info(f"模块缓存设备ID: {_CACHED_DEVICE_ID}")
             return _CACHED_DEVICE_ID
+        except RuntimeError:
+            raise
         except Exception as e:
-            logging.error(f"获取设备ID失败: {e}")
-            exit(1)
+            raise RuntimeError(f"获取设备ID失败: {e}") from None
 
     def get_android_version(self,device_id):
         """"" 获取指定设备的Android版本 """""
+
+        global _Version_Information
+
+        logging.debug(f"当前模块缓存安卓版本: {_Version_Information}")
+
+        if _Version_Information is not None:
+
+            return _Version_Information
+
         try:
             version_result = subprocess.run(
                 ['adb', '-s', device_id, 'shell', 'getprop', 'ro.build.version.release'],
                 text=True, capture_output=True, check=True
             )
-            return version_result.stdout.strip()
+            _Version_Information = version_result.stdout.strip()
+            logging.debug(f"当前模块安卓版本: {_Version_Information}")
+            return _Version_Information
         except Exception as e:
             logging.error(f"获取Android版本失败: {e}")
             return "未知"
 
     def get_device_fingerprint(self,device_id):
         """"" 获取设备指纹信息 """""
+
+        global _Fingerprint_information
+
+        logging.debug(f"当前模块缓存的指纹信息: {_Fingerprint_information}")
+
+        if _Fingerprint_information is not None:
+
+            return _Fingerprint_information
+
         fingerprint_commands = [
             ['adb', '-s', device_id, 'shell', 'getprop', 'ro.vendor.build.onyxfp'],
             ['adb', '-s', device_id, 'shell', 'getprop', 'ro.vendor.build.fingerprint'],
@@ -81,36 +113,53 @@ class Device_basic_information:
                 fingerprint = result.stdout.strip()
                 if fingerprint:
                     logging.debug(f"使用命令 {' '.join(cmd)} 成功获取指纹")
-                    return fingerprint
+                    _Fingerprint_information = fingerprint
+                    return _Fingerprint_information
             except Exception:
                 continue
 
         logging.error(f"所有指纹获取方法均失败，设备ID: {device_id}")
         return None
 
-    def get_wifi(self,device_id):
+    def get_wifi(self, device_id):
         """检查并显示Wi-Fi连接状态"""
         try:
             result = subprocess.run(
-                ['adb', '-s' , device_id ,'shell', 'dumpsys', 'connectivity'],
+                ['adb', '-s', device_id, 'shell', 'dumpsys', 'connectivity'],
                 capture_output=True,
                 text=True
             )
             output = result.stdout
 
-            wifi_info = re.search(r'NetworkAgentInfo\{.*?ni\{WIFI CONNECTED.*?\}.*?TransportInfo: <(.*?)>', output,
-                                  re.DOTALL)
+            # 核心修复：调整正则终止符（Score\{ → Requests:），保留新旧格式匹配逻辑
+            wifi_info = re.search(
+                r'NetworkAgentInfo\{.*?ni\{(?:\[type: WIFI.*?state: CONNECTED/CONNECTED.*?\]|WIFI CONNECTED.*?)\}(.*?)Requests:',
+                output,
+                re.DOTALL
+            )
             if not wifi_info:
-                logging.info(f"Wi-Fi状态: 未连接 ")
-                raise SystemExit(f"请连接Wi-Fi后！！！ 开始测试")
+                logging.info("Wi-Fi状态: 未连接 ")
+                # ========== 原逻辑完全保留 ==========
+                logging.error("请连接Wi-Fi后再开始测试！！！")
+                raise RuntimeError("Wi-Fi未连接，无法继续测试")
 
+            # 保留原变量名transport_info，原逻辑完全不变
             transport_info = wifi_info.group(1)
-            ssid = re.search(r'SSID: "([^"]+)"', transport_info).group(1) or "未知"
-            ip = re.search(r'IP: /([^,]+)', transport_info).group(1) or "未分配"
-            rssi = re.search(r'RSSI: (-?\d+)', transport_info).group(1) or "未知"
-            link_speed = re.search(r'Link speed: (\d+Mbps)', transport_info).group(1) or "未知"
 
-            logging.info(f"Wi-Fi状态: 已连接")
+            # 原匹配逻辑完全保留，未做任何修改
+            ssid_match = re.search(r'SSID: "([^,]+)"', transport_info)  # 仅调整SSID匹配规则
+            ssid = ssid_match.group(1).strip() if ssid_match else "未知"
+
+            ip_match = re.search(r'LinkAddresses: .*?(\d+\.\d+\.\d+\.\d+)', transport_info)  # 仅调整IP匹配规则
+            ip = ip_match.group(1).strip() if ip_match else "未分配"
+
+            rssi_match = re.search(r'SignalStrength: (-?\d+)', transport_info)  # 仅调整RSSI匹配规则
+            rssi = rssi_match.group(1).strip() if rssi_match else "未知"
+
+            link_speed_match = re.search(r'Link speed: (\d+Mbps)', transport_info)
+            link_speed = link_speed_match.group(1).strip() if link_speed_match else "未知"
+
+            logging.info("Wi-Fi状态: 已连接")
             logging.info(f"  SSID: {ssid}")
             logging.info(f"  IP地址: {ip}")
             logging.info(f"  信号强度: {rssi} dBm")
@@ -118,10 +167,21 @@ class Device_basic_information:
 
             if rssi != "未知":
                 rssi_value = int(rssi)
-                quality = " 优秀 " if rssi_value >= -50 else " 良好" if rssi_value >= -70 else " 一般 "
+                if rssi_value >= -50:
+                    quality = "优秀"
+                elif rssi_value >= -70:
+                    quality = "良好"
+                else:
+                    quality = "一般"
                 logging.info(f"Wi-Fi信号质量: {quality}")
 
-            return {"connected": True, "ssid": ssid, "ip": ip, "rssi": rssi, "link_speed": link_speed}
+            return {
+                "connected": True,
+                "ssid": ssid,
+                "ip": ip,
+                "rssi": rssi,
+                "link_speed": link_speed
+            }
 
         except Exception as e:
             logging.error(f"检查Wi-Fi状态时出错: {e}")

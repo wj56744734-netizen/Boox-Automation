@@ -4,7 +4,7 @@ from threading import Lock
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.common.by import By
-from Note_Automation.Note_Class.Note_class import Operation_method
+from Note_Automation.Note_class.Note_class import Operation_method
 from Note_Automation.config import driver
 from pathlib import Path
 from Note_Automation.Devices_list.Device_basic_information import Device_basic_information
@@ -12,16 +12,18 @@ import allure
 import openpyxl
 import pytest
 import pypdf
+import re
 import subprocess
 import logging
 import time
 
 #获取设备基础信息
 devices = Device_basic_information()
-device_info = devices.get_device_info()
-if device_info:
-    device_region = device_info.get('device_region')
-
+try:
+    device_info = devices.get_device_info()
+except RuntimeError:
+    device_info = None
+device_region = device_info.get('device_region') if device_info else None
 class Public_method:
 
     def __init__(self):
@@ -32,6 +34,41 @@ class Public_method:
         self.driver = driver
         self.method = Operation_method(self.driver)
 
+    def get_version(self, short=False):
+        """从设备信息中解析版本号；short=True 返回主版本（如 4.2）。"""
+        info = Device_basic_information().get_device_info() or {}
+        raw = (info.get('version_info') or '').strip()
+        if not raw:
+            return None
+        if re.search(r'dev', raw, re.IGNORECASE):
+            return 'dev'
+        match = re.search(r'\d+(?:\.\d+){1,2}', raw)
+        if not match:
+            return raw
+        version = match.group()
+        if short:
+            parts = version.split('.')
+            return '.'.join(parts[:2])
+        return version
+
+    def dismiss_first_time_guide(self, timeout=3, max_steps=4, dismiss_text="知道了"):
+        """关闭首次进入画布等场景出现的引导弹窗。
+        - 引导可能是多步骤，按出现顺序连续点击同一确认按钮，直至不再出现为止
+        - 全程静默：未出现引导时不抛错，不影响后续操作
+        """
+        dismissed = 0
+        for _ in range(max_steps):
+            try:
+                element = WebDriverWait(self.driver, timeout).until(
+                    EC.element_to_be_clickable((By.XPATH, f'//*[@text="{dismiss_text}"]'))
+                )
+                element.click()
+                dismissed += 1
+            except Exception:
+                break
+        if dismissed:
+            logging.debug(f"已关闭首进引导 {dismissed} 次（按钮：{dismiss_text}）")
+        return dismissed
 
     def create_handwritten_notes(self):
         """ 创建手写笔记 """
@@ -41,6 +78,9 @@ class Public_method:
 
         # 手写笔记创建页面点击 创建
         self.method.xpath_text_click("创建")
+
+        # 首次进入画布会出现工具条引导，先关闭再退出
+        self.dismiss_first_time_guide()
 
         # 退出手写笔记
         self.method.by_element_click(By.ID, 'com.onyx.android.note:id/back_icon')
@@ -102,6 +142,9 @@ class Public_method:
 
         # 手写笔记创建页面点击 创建
         self.method.xpath_text_click("创建")
+
+        # 首次进入画布会出现工具条引导，先关闭再退出
+        self.dismiss_first_time_guide()
 
         # 退出无界笔记
         self.method.by_element_click(By.ID, 'com.onyx.android.note:id/back_icon')

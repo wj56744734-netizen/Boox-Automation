@@ -3,6 +3,7 @@ import time
 import datetime
 import csv
 import os
+from Note_Automation.Devices_list.Device_basic_information import Device_basic_information
 
 
 class BatteryMonitor:
@@ -15,6 +16,7 @@ class BatteryMonitor:
         self.interval = interval
         self.log_file = log_file
         self.original_battery_state = None  # 用于保存原始电池状态
+        self.device_id = Device_basic_information().get_connected_device_ids()
         self.initialize_log()
 
     def initialize_log(self):
@@ -26,6 +28,8 @@ class BatteryMonitor:
 
     def run_adb_command(self, command):
         """执行ADB命令并返回结果"""
+        if command and command[0] == "adb" and "-s" not in command:
+            command = ["adb", "-s", self.device_id] + command[1:]
         try:
             result = subprocess.check_output(
                 command,

@@ -1,5 +1,6 @@
 from Note_Automation.config import driver
 from Note_Automation.Devices_list.Device_basic_information import Device_basic_information
+from Note_Automation.framework.paths import new_allure_results_dir, new_allure_html_dir
 from datetime import datetime
 import subprocess
 import re
@@ -8,9 +9,8 @@ import os
 
 current_time = datetime.now().strftime("%Y%m%d%H%M%S")
 
-script_dir = os.path.dirname(os.path.abspath(__file__))
-results_dir = f"{script_dir}/Test_report/Test_report/Test_{current_time}"
-report_dir = f"{script_dir}/Test_report/Test_report_html/Test_html_{current_time}"
+results_dir = str(new_allure_results_dir(current_time))
+report_dir = str(new_allure_html_dir(current_time))
 
 
 def extract_test_stats(pytest_output):

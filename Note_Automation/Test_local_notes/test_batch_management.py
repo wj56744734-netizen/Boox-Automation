@@ -1,7 +1,7 @@
 from Note_Automation.config import driver
 from Note_Automation.Devices_list.Device_basic_information import Device_basic_information
 from selenium.webdriver.common.by import By
-from Note_Automation.Note_Class.Note_class import Operation_method
+from Note_Automation.Note_class.Note_class import Operation_method
 from Note_Automation.Test_local_notes.Public_method import Public_method
 from Note_Automation.conftest import note_mark_china
 import pytest
@@ -13,10 +13,11 @@ import re
 
 #获取设备基础信息
 devices = Device_basic_information()
-device_info = devices.get_device_info()
-if device_info:
-    device_region = device_info.get('device_region')
-
+try:
+    device_info = devices.get_device_info()
+except RuntimeError:
+    device_info = None
+device_region = device_info.get('device_region') if device_info else None
 @allure.feature("笔记批量管理测试类")
 @pytest.mark.usefixtures("note_test_initial")
 class Test_batch_management:

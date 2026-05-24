@@ -2,10 +2,10 @@ import logging
 import os
 import time
 from selenium.webdriver.common.by import By
-from Note_Automation.Note_Class.Note_class import Operation_method
+from Note_Automation.Note_class.Note_class import Operation_method
 from Note_Automation.config import driver
 from Note_Automation.Test_local_notes.Public_method import Public_method
-from Note_Automation.Other_tests.Test_for_test_note.Test_from_local_files import Test_from_local_files
+# from Note_Automation.Other_tests.Test_Stress.Test_from_local_files import Test_from_local_files
 
 
 class Test_note_omitted_issues:
@@ -15,14 +15,14 @@ class Test_note_omitted_issues:
         self.method = Operation_method(driver)
         self.public = Public_method()
         self.driver = driver
-        self.Test_from_local_files = Test_from_local_files()
+        # self.Test_from_local_files = Test_from_local_files()
         # self.test = test
 
     def test_note_pdf_link_jump_to(self,note_test_initial):
         self.method.xpath_text_click("笔记")
         self.method.xpath_text_click("创建笔记")
         self.method.by_name_click(By.ID, "com.onyx:id/title", "从本地文件")
-        self.public.import_file_bootstrap("选择文件即可创建笔记", "知道了")
+        self.public.import_file_bootstrap("笔记首页.从本地文件导入引导", "笔记首页.从本地文件导入引导确认")
         self.public.get_file("笔记自动化测试文件","pdf内链")
         file_names = []
         element = self.driver.find_elements(By.ID, "com.onyx.android.note:id/title")

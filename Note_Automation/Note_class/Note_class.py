@@ -1,7 +1,14 @@
 from functools import wraps
 import logging
 import time
-from selenium.common.exceptions import TimeoutException
+from selenium.common.exceptions import (
+    TimeoutException,
+    StaleElementReferenceException,
+    NoSuchElementException,
+    ElementNotInteractableException,
+    InvalidSessionIdException,
+    WebDriverException,
+)
 import allure
 from selenium.webdriver.common.actions.action_builder import ActionBuilder
 from selenium.webdriver.common.by import By
@@ -9,43 +16,106 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
 from appium.webdriver.common.touch_action import TouchAction
 
+from Note_Automation.Note_class.element_catalog import describe as _describe_locator
+
+
+# 仅以下异常类型才参与重试，其它（含 session 级失败）直接抛出
+RETRYABLE_EXCEPTIONS = (
+    TimeoutException,
+    StaleElementReferenceException,
+    NoSuchElementException,
+    ElementNotInteractableException,
+)
+
+# 会话级异常：直接放弃，避免在断开的 driver 上空转
+SESSION_FATAL_EXCEPTIONS = (InvalidSessionIdException,)
+# 兜底关键字（不同 selenium/appium 版本对 session 失效的异常类名不一致，用消息匹配兜住）
+SESSION_FATAL_KEYWORDS = (
+    "NoSuchDriverException",
+    "invalid session id",
+    "session is not created",
+    "Instrumentation process is not running",
+)
+
+
+def _format_call_label(func_name, filtered_args):
+    """生成简洁可读的"调用标签"，用于日志/截图命名。"""
+    if not filtered_args:
+        return func_name
+    first = filtered_args[0]
+    text = str(first)
+    if len(text) > 60:
+        text = text[:57] + "..."
+    return f"{func_name}({text})"
+
+
+def _annotate_with_catalog(filtered_args):
+    """如果 args 中包含已知 locator，从 catalog 取描述。"""
+    for arg in filtered_args:
+        desc = _describe_locator(str(arg))
+        if desc:
+            return desc
+    return None
+
 
 # ------------------------------ 异常处理装饰器 ------------------------------
 def retry_and_handle_exceptions(max_retries=3, retry_delay=1):
     """
-    装饰器：捕获元素操作的超时/未知异常，自动重试后截图并抛异常。
-    - 参数：max_retries（重试次数，默认3）、retry_delay（重试间隔，默认1秒）
-    - 逻辑：过滤方法内的类实例，重试失败时截图保存到本地并附加到Allure报告。
+    装饰器：捕获"可重试"的元素查找异常，重试 N 次仍失败则截图并抛出。
+    - 会话级异常（InvalidSessionId / NoSuchDriver）直接抛出，不再重试
+    - 其它非可重试异常也直接抛出，保留原始堆栈
     """
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
             filtered_args = [arg for arg in args if not isinstance(arg, Operation_method)]
+            call_label = _format_call_label(func.__name__, filtered_args)
+            last_exc = None
             for attempt in range(max_retries):
                 try:
                     return func(*args, **kwargs)
-                except TimeoutException:
-                    msg = f"获取元素 {filtered_args} ！！！超时 , 重试次数 {attempt + 1}/{max_retries}"
-                    logging.debug(msg)
-                except Exception:
-                    msg = f"获取元素 {filtered_args} ！！！未知异常 , 重试次数 {attempt + 1}/{max_retries}"
-                    logging.debug(msg)
+                except SESSION_FATAL_EXCEPTIONS:
+                    raise
+                except RETRYABLE_EXCEPTIONS as e:
+                    last_exc = e
+                    logging.debug(
+                        f"{call_label} 超时/未找到，重试 {attempt + 1}/{max_retries}"
+                    )
+                except WebDriverException as e:
+                    # 部分 driver 异常无法明确分类：用消息匹配把"会话失效"过滤为致命
+                    text = str(e)
+                    if any(k in text for k in SESSION_FATAL_KEYWORDS):
+                        raise
+                    last_exc = e
+                    logging.debug(
+                        f"{call_label} WebDriver 异常，重试 {attempt + 1}/{max_retries}: {type(e).__name__}"
+                    )
                 if attempt < max_retries - 1:
                     time.sleep(retry_delay)
-            msg = f"获取元素 '{filtered_args}' 在 {max_retries} 次重试后仍失败"
+
+            desc = _annotate_with_catalog(filtered_args)
+            tail = f"，元素用途: {desc}" if desc else ""
+            msg = f"{call_label} 在 {max_retries} 次重试后仍失败{tail}"
             logging.error(msg)
+
             from Note_Automation.config import driver
+            from Note_Automation.framework.paths import safe_screenshot_path
 
-            file_path = f"/Users/xiaoyu/Downloads/{filtered_args}.png"
-            success = driver.get_screenshot_as_file(file_path)
-            if success:
-                print(f"截图已保存至: {file_path}")
-            else:
-                print("截图失败")
+            file_path = str(safe_screenshot_path(call_label))
+            try:
+                driver.get_screenshot_as_file(file_path)
+                logging.info(f"失败截图已保存至: {file_path}")
+                screenshot = driver.get_screenshot_as_png()
+                attach_name = f"{call_label} 失败截图" + (f"｜{desc}" if desc else "")
+                allure.attach(
+                    screenshot,
+                    name=attach_name,
+                    attachment_type=allure.attachment_type.PNG,
+                )
+            except Exception as screenshot_err:
+                logging.warning(f"截图失败：{screenshot_err}")
 
-            screenshot = driver.get_screenshot_as_png()
-            allure.attach(screenshot, name=f"获取元素 {filtered_args} 失败截图", attachment_type=allure.attachment_type.PNG)
-            raise Exception(msg)
+            raise Exception(msg) from last_exc
         return wrapper
     return decorator
 
@@ -57,32 +127,52 @@ class Base_note_class:
         self.driver = driver
         self.default_timeout = 5
 
+    @staticmethod
+    def _xpath_text(name, *, clickable_kind=True):
+        """生成稳健的文本定位 XPath，避免 @text= 严格匹配导致的空白字符问题。"""
+        # 转义文本内的单引号
+        safe_name = str(name).replace("'", "\\'")
+        # 优先 normalize-space 兜住前后空白/换行；查不到时再 contains 兜底
+        primary = f"//*[normalize-space(@text)='{safe_name}']"
+        fallback = f"//*[contains(@text,'{safe_name}')]"
+        return primary, fallback
+
     @retry_and_handle_exceptions()
     def xpath_check_timeout(self, name, timeout=None):
         """
-        等待“文本匹配”的元素可点击（XPath定位：//*[@text="{name}"]）。
-        - 参数：name（元素文本）、timeout（超时时间，默认取default_timeout）
-        - 返回：可点击的WebElement（失败由装饰器抛异常）
+        等待"文本匹配"的元素可点击（先精确，再 contains 兜底）。
         """
         timeout = timeout or self.default_timeout
-        element = WebDriverWait(self.driver, timeout).until(
-            EC.element_to_be_clickable((By.XPATH, f'//*[@text="{name}"]'))
-        )
-        logging.debug(f"[DEBUG] 成功获取可点击元素（文本定位）：{name}")  # 新增DEBUG日志
+        primary, fallback = self._xpath_text(name)
+        try:
+            element = WebDriverWait(self.driver, timeout).until(
+                EC.element_to_be_clickable((By.XPATH, primary))
+            )
+        except TimeoutException:
+            element = WebDriverWait(self.driver, max(timeout // 2, 2)).until(
+                EC.element_to_be_clickable((By.XPATH, fallback))
+            )
+            logging.debug(f"[DEBUG] 文本定位用 contains 兜底命中：{name}")
+        logging.debug(f"[DEBUG] 成功获取可点击元素（文本定位）：{name}")
         return element
 
     @retry_and_handle_exceptions()
     def xpath_check_display_timeout(self, name, timeout=None):
         """
-        等待“文本匹配”的元素可见（XPath定位：//*[@text="{name}"]）。
-        - 参数：name（元素文本）、timeout（超时时间，默认取default_timeout）
-        - 返回：可见的WebElement（失败由装饰器抛异常）
+        等待"文本匹配"的元素可见（先精确，再 contains 兜底）。
         """
         timeout = timeout or self.default_timeout
-        element = WebDriverWait(self.driver, timeout).until(
-            EC.visibility_of_element_located((By.XPATH, f'//*[@text="{name}"]'))
-        )
-        logging.debug(f"[DEBUG] 成功获取可见元素（文本定位）：{name}")  # 新增DEBUG日志
+        primary, fallback = self._xpath_text(name)
+        try:
+            element = WebDriverWait(self.driver, timeout).until(
+                EC.visibility_of_element_located((By.XPATH, primary))
+            )
+        except TimeoutException:
+            element = WebDriverWait(self.driver, max(timeout // 2, 2)).until(
+                EC.visibility_of_element_located((By.XPATH, fallback))
+            )
+            logging.debug(f"[DEBUG] 文本定位用 contains 兜底命中：{name}")
+        logging.debug(f"[DEBUG] 成功获取可见元素（文本定位）：{name}")
         return element
 
     @retry_and_handle_exceptions()
@@ -132,15 +222,14 @@ class Base_note_class:
 class Operation_method(Base_note_class):
     def xpath_text_click(self, name, should_click=True):
         """
-        通过“文本”定位元素，可选点击。
-        - 参数：name（元素文本）、should_click（是否点击，默认True）
-        - 返回：成功则返回WebElement，失败返回False
+        通过"文本"定位元素，可选点击。
+        - 参数：
+            name        元素文本
+            should_click 是否点击；None=只校验存在不点击；其余真值=点击
+        - 返回：成功的 WebElement（找不到会由装饰器抛异常）
         """
         element = self.xpath_check_timeout(name)
-        logging.debug(f"[DEBUG] 通过文本定位到元素：{name}")  # 新增DEBUG日志
-        if not element:
-            logging.error(f"未获取到元素 {name} ")
-            return False
+        logging.debug(f"[DEBUG] 通过文本定位到元素：{name}")
         if should_click is not None:
             element.click()
         return element
@@ -268,21 +357,27 @@ class Operation_method(Base_note_class):
 
     def by_name_click(self, by_method, locator, name, should_click=True):
         """
-        元素列表中按“文本匹配”定位，可选点击。
+        元素列表中按"文本匹配"定位，可选点击（strip 后比较，避免空白差异）。
         - 步骤：定位列表→遍历找文本→匹配则操作
         - 返回：成功返回元素列表，失败返回False
         """
         elements = self.check_list_timeout(by_method, locator)
-        logging.debug(f"[DEBUG] 找到元素列表（{by_method}：{locator}），共 {len(elements)} 个元素")  # 新增DEBUG日志
+        logging.debug(f"[DEBUG] 找到元素列表（{by_method}：{locator}），共 {len(elements)} 个元素")
         if not elements:
             logging.error(f"未找到 {locator} 元素")
             return False
+        target = str(name).strip()
         for element in elements:
-            if element.text == name:
-                logging.debug(f"[DEBUG] 匹配到文本 {name} 的元素")  # 新增DEBUG日志
+            try:
+                actual = (element.text or "").strip()
+            except StaleElementReferenceException:
+                continue
+            if actual == target:
+                logging.debug(f"[DEBUG] 匹配到文本 {name} 的元素")
                 if should_click is not None:
                     element.click()
                 return elements
+        logging.error(f"在 {locator} 列表中未匹配到文本：{name}")
         return False
 
     def by_index_name_click(self, by_method, locator, name, index=0, should_click=True):
@@ -368,15 +463,18 @@ class Operation_method(Base_note_class):
 
     def wait_for_press_name(self, by_method, locator, name):
         """
-        元素列表中按“文本匹配”定位，执行长按操作。
-        - 步骤：定位列表→遍历找文本→匹配则长按（click_and_hold）
-        - 返回：成功返回True，失败返回False
+        元素列表中按"文本匹配"定位，执行长按操作（strip 后比较）。
         """
         elements = self.check_list_timeout(by_method, locator)
-        logging.debug(f"[DEBUG] 找到元素列表（{by_method}：{locator}），共 {len(elements)} 个元素")  # 新增DEBUG日志
+        logging.debug(f"[DEBUG] 找到元素列表（{by_method}：{locator}），共 {len(elements)} 个元素")
+        target = str(name).strip()
         for element in elements:
-            if element.text == name:
-                logging.debug(f"[DEBUG] 匹配到文本 {name} 的元素，执行长按")  # 新增DEBUG日志
+            try:
+                actual = (element.text or "").strip()
+            except StaleElementReferenceException:
+                continue
+            if actual == target:
+                logging.debug(f"[DEBUG] 匹配到文本 {name} 的元素，执行长按")
                 actions = ActionBuilder(self.driver)
                 actions.pointer_action.click_and_hold(element)
                 actions.perform()

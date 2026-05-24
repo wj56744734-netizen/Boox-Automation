@@ -6,6 +6,7 @@ import sys
 import threading
 from collections import deque
 import argparse
+from Note_Automation.Devices_list.Device_basic_information import Device_basic_information
 
 # 配置日志
 logging.basicConfig(
@@ -37,6 +38,7 @@ class GCMonitor:
         self.running = False
         self.process = None
         self.thread = None
+        self.device_id = Device_basic_information().get_connected_device_ids()
 
     def start(self):
         """启动GC监控"""
@@ -64,11 +66,11 @@ class GCMonitor:
         """核心GC日志监控逻辑"""
         try:
             # 清除旧日志缓存
-            subprocess.run(['adb', 'logcat', '-c'], check=True)
+            subprocess.run(['adb', '-s', self.device_id, 'logcat', '-c'], check=True)
 
             # 启动logcat进程（使用原始格式，不限制缓冲区）
             self.process = subprocess.Popen(
-                ['adb', 'logcat'],
+                ['adb', '-s', self.device_id, 'logcat'],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
@@ -155,8 +157,7 @@ class GCMonitor:
                 logger.warning(f"  内存状态: 空闲 {free_percent_str}%，{used_mb_str}MB/{total_mb_str}MB")
                 logger.warning(f"  总计回收: {total_reclaimed_mb:.1f} MB ")
                 logger.warning(f"  日志: {line[:200]}...")
-                import sys
-                sys.exit(0)
+                logger.warning("⚠️ 超过100MB GC回收阈值，可能存在内存泄漏风险")
 
         except Exception as e:
             logger.error(f"处理GC日志失败: {e}")
@@ -169,6 +170,7 @@ class MemoryMonitor:
     def __init__(self, package_name=None, interval=5, max_samples=10,
                  threshold=0.7, gc_threshold=50.0):
         self.package_name = package_name or "com.onyx.android.note"
+        self.device_id = Device_basic_information().get_connected_device_ids()
         self.interval = interval
         self.max_samples = max_samples
         self.threshold = threshold
@@ -188,7 +190,7 @@ class MemoryMonitor:
         """获取系统总内存(MB)"""
         try:
             result = subprocess.run(
-                ['adb', 'shell', 'cat', '/proc/meminfo'],
+                ['adb', '-s', self.device_id, 'shell', 'cat', '/proc/meminfo'],
                 capture_output=True, text=True, check=True
             )
             if match := re.search(r'MemTotal:\s+(\d+)\s+kB', result.stdout):
@@ -202,7 +204,7 @@ class MemoryMonitor:
         """获取进程内存使用量(MB)"""
         try:
             result = subprocess.run(
-                ['adb', 'shell', 'dumpsys', 'meminfo', self.package_name],
+                ['adb', '-s', self.device_id, 'shell', 'dumpsys', 'meminfo', self.package_name],
                 capture_output=True, text=True, check=True
             )
             if match := re.search(r'TOTAL\s+PSS:\s+(\d+)', result.stdout, re.IGNORECASE):
@@ -230,12 +232,15 @@ class MemoryMonitor:
 
                 if self._check_memory_leak():
                     logger.error("⚠️ 检测到内存泄漏！")
+                    exit()
 
                 time.sleep(self.interval)
         except KeyboardInterrupt:
             logger.info("监控已停止")
+            exit()
         except Exception as e:
             logger.error(f"监控错误: {e}")
+            exit()
         finally:
             self.gc_monitor.stop()
 

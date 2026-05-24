@@ -1,5 +1,5 @@
 from Note_Automation.config import driver
-from Note_Automation.Note_Class.Note_class import Operation_method
+from Note_Automation.Note_class.Note_class import Operation_method
 from Note_Automation.Test_local_notes.Public_method import Public_method
 from Note_Automation.Devices_list.Device_basic_information import Device_basic_information
 from Note_Automation.conftest import note_mark_china, note_mark_abroad,note_mark_increment
@@ -16,10 +16,11 @@ import time
 
 #获取设备基础信息
 devices = Device_basic_information()
-device_info = devices.get_device_info()
-if device_info:
-    device_region = device_info.get('device_region')
-
+try:
+    device_info = devices.get_device_info()
+except RuntimeError:
+    device_info = None
+device_region = device_info.get('device_region') if device_info else None
 @allure.feature("笔记创建相关测试类")
 class Test_create_notes:
 
