@@ -105,6 +105,8 @@ def _build_driver_options():
         "automationName": "UiAutomator2",
         "newCommandTimeout": 3600,
         "adbExecTimeout": 120000,
+        # 部分机型在 XPath2 下容易出现 AccessibilityNodeInfo 超时，强制回退 XPath1 稳定性更高
+        "settings[enforceXPath1]": True,
     })
     return options
 
@@ -132,7 +134,7 @@ def init_driver(exit_on_fail=True):
 
 
 def ensure_driver_alive(reason=None):
-    """探活 driver；未初始化时先尝试初始化，失败时直接抛错。"""
+    """探活 driver；session 失效时自动重建，设备不在线时抛错。"""
     real_driver = driver.get_driver()
     try:
         if real_driver is None:
@@ -145,6 +147,23 @@ def ensure_driver_alive(reason=None):
     except Exception as e:
         friendly_msg = _friendly_driver_error(str(e))
         detail = f"{friendly_msg}（reason={reason}）" if reason else friendly_msg
-        logging.warning(f"Driver 探活失败：{detail}")
-        raise RuntimeError(friendly_msg) from None
+        logging.warning(f"Driver 探活失败，尝试重建 session：{detail}")
+        # 尝试清理旧 session 并重建
+        try:
+            if real_driver is not None:
+                try:
+                    real_driver.quit()
+                except Exception:
+                    pass
+                driver.clear_driver()
+            real_driver = init_driver(exit_on_fail=False)
+            _ = real_driver.current_package
+            _ = real_driver.current_activity
+            _ = real_driver.get_window_size()
+            logging.info(f"Driver session 重建成功（reason={reason}）")
+            return real_driver
+        except Exception as rebuild_error:
+            rebuild_msg = _friendly_driver_error(str(rebuild_error))
+            logging.error(f"Driver session 重建失败：{rebuild_msg}")
+            raise RuntimeError(rebuild_msg) from None
 

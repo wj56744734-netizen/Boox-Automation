@@ -1,0 +1,371 @@
+# 笔记自动化测试 — system 元素定位
+# 68 个元素
+
+elements:
+  设备相关.阅读器存储入口:
+    locator: [xpath, 存储]
+    operation: 阅读器设备点击存储入口
+    desc: 阅读器设备中进入存储的入口
+    index: 0
+  设备相关.平板Dock容器:
+    locator: [id, 'com.onyx:id/dock']
+    operation: 定位平板Dock容器
+    desc: 平板设备中的Dock栏容器
+    index: 0
+  设备相关.平板封面边框:
+    locator: [id, 'com.onyx:id/imageView_cover_border']
+    operation: 定位平板封面边框
+    desc: 平板设备中的封面边框元素（索引2）
+    index: 2
+    parent_key: 设备相关.平板Dock容器
+  设备相关.存储卷列表:
+    locator: [id, 'com.onyx:id/volume_name']
+    name: 存储
+    operation: 定位存储卷列表并点击目标卷
+    desc: 文件选择器中的卷列表项，默认匹配“存储”
+    index: 0
+  设备相关.存储目录-note:
+    locator: [xpath, note]
+    operation: 在存储页定位 note 目录
+    desc: 导入文件场景下常用的 note 目录入口
+    index: 0
+  设备相关.存储页码信息:
+    locator: [xpath, '//android.widget.TextView[@resource-id="com.onyx:id/textView_page_info"]']
+    operation: 获取存储页码信息
+    desc: 文件管理页底部页码（当前页/总页数）
+    index: 0
+  设备相关.导入页码信息:
+    locator: [id, 'com.onyx.android.note:id/page_info']
+    operation: 获取导入页码信息
+    desc: 导入文件列表页的页码信息
+    index: 0
+  设备相关.导入文件标题列表:
+    locator: [id, 'com.onyx.android.note:id/title']
+    operation: 获取导入文件标题列表
+    desc: 导入列表页所有文件标题元素
+    index: 0
+  设备相关.阅读器文件入口:
+    locator: [xpath, 文件]
+    operation: 阅读器入口兜底-文件
+    desc: 阅读器未命中“存储”时的文件入口兜底
+    index: 0
+  设备相关.阅读器文件管理入口:
+    locator: [xpath, 文件管理]
+    operation: 阅读器入口兜底-文件管理
+    desc: 阅读器未命中“存储”时的文件管理入口兜底
+    index: 0
+  设备相关.阅读器文件浏览器入口:
+    locator: [xpath, 文件浏览器]
+    operation: 阅读器入口兜底-文件浏览器
+    desc: 阅读器未命中“存储”时的文件浏览器入口兜底
+    index: 0
+  设备相关.阅读器内部存储入口:
+    locator: [xpath, 内部存储]
+    operation: 阅读器入口兜底-内部存储
+    desc: 阅读器未命中“存储”时的内部存储入口兜底
+    index: 0
+  通用操作.确定按钮:
+    locator: [xpath, 确定]
+    operation: 点击通用确定按钮
+    desc: 通用弹窗确认按钮
+    index: 0
+  通用操作.取消按钮:
+    locator: [xpath, 取消]
+    operation: 点击通用取消按钮
+    desc: 通用弹窗取消按钮
+    index: 0
+  通用操作.导出按钮:
+    locator: [xpath, 导出]
+    operation: 点击导出按钮
+    desc: 批量管理与常规菜单中的导出入口
+    index: 0
+  通用操作.矢量PDF选项:
+    locator: [xpath, 矢量PDF]
+    operation: 选择导出矢量PDF
+    desc: 导出格式选择中的矢量PDF
+    index: 0
+  通用操作.保留模板选项:
+    locator: [xpath, 保留模板]
+    operation: 校验保留模板选项
+    desc: 合并笔记弹窗中的保留模板选项
+    index: 0
+  通用操作.创建按钮:
+    locator: [id, 'com.onyx:id/create_icon']
+    operation: 点击创建按钮
+    desc: 有笔记状态下的创建入口图标
+    index: 0
+  通用操作.笔记页数计数:
+    locator: [id, 'com.onyx:id/note_count']
+    operation: 获取笔记页数计数
+    desc: 笔记列表中每个卡片的页数显示
+    index: 0
+  通用操作.笔记标题列表:
+    locator: [id, 'com.onyx:id/title']
+    operation: 获取笔记标题列表
+    desc: 笔记列表页用于按标题匹配目标项
+    index: 0
+  通用操作.重命名输入框:
+    locator: [id, 'com.onyx:id/editText_new_name']
+    operation: 输入重命名内容
+    desc: 重命名弹窗中的输入框
+    index: 0
+  通用操作.搜索输入框:
+    locator: [id, 'com.onyx:id/search_et_input']
+    operation: 输入搜索关键词
+    desc: 笔记搜索页关键词输入框
+    index: 0
+  通用操作.搜索按钮:
+    locator: [id, 'com.onyx:id/search_button']
+    operation: 点击搜索按钮
+    desc: 笔记搜索页执行搜索按钮
+    index: 0
+  通用操作.搜索结果统计:
+    locator: [id, 'com.onyx:id/total']
+    operation: 获取搜索结果统计
+    desc: 笔记搜索结果总计文本
+    index: 0
+  通用操作.文件项标题列表:
+    locator: [id, 'com.onyx:id/textviewItem']
+    operation: 获取文件管理项标题列表
+    desc: 文件管理器内条目标题列表
+    index: 0
+  通用操作.设置标题栏:
+    locator: [id, 'com.onyx:id/text_title']
+    operation: 设置页返回/路径标题栏
+    desc: 设置页或文件管理页标题栏
+    index: 0
+  通用操作.恢复按钮:
+    locator: [id, 'com.onyx:id/restore']
+    operation: 点击恢复按钮
+    desc: 备份与恢复页面中的恢复入口
+    index: 0
+  通用操作.弹窗确认按钮:
+    locator: [id, 'com.onyx:id/button_positive']
+    operation: 点击弹窗确认按钮
+    desc: 通用确认弹窗中的正向按钮
+    index: 0
+  通用操作.备份操作按钮:
+    locator: [xpath, '//android.widget.ImageView[@resource-id="com.onyx:id/extra_icon"]']
+    operation: 点击备份操作按钮
+    desc: 备份与恢复页面右上角操作按钮
+    index: 0
+  通用操作.复制菜单项:
+    locator: [id, 'android:id/text1']
+    name: 复制
+    operation: 选择复制菜单项
+    desc: 文件管理器长按后菜单中的复制项
+    index: 0
+  通用操作.粘贴按钮:
+    locator: [id, 'com.onyx:id/textview_paste']
+    name: 粘贴
+    operation: 点击粘贴按钮
+    desc: 文件管理器中的粘贴入口
+    index: 0
+  通用操作.覆盖全部按钮:
+    locator: [xpath, 覆盖全部]
+    operation: 点击覆盖全部
+    desc: 文件复制冲突时选择覆盖全部
+    index: 0
+  通用操作.查看笔记按钮:
+    locator: [xpath, 查看笔记]
+    operation: 点击查看笔记
+    desc: 备份恢复完成后进入笔记
+    index: 0
+  通用操作.搜索筛选-标签:
+    locator: [xpath, 标签]
+    operation: 切换搜索筛选到标签
+    desc: 笔记搜索筛选项-标签
+    index: 0
+  通用操作.搜索筛选-手写:
+    locator: [xpath, 手写]
+    operation: 切换搜索筛选到手写
+    desc: 笔记搜索筛选项-手写
+    index: 0
+  通用操作.搜索筛选-标题:
+    locator: [xpath, 标题]
+    operation: 切换搜索筛选到标题
+    desc: 笔记搜索筛选项-标题
+    index: 0
+  通用操作.搜索筛选-文本:
+    locator: [xpath, 文本]
+    operation: 切换搜索筛选到文本
+    desc: 笔记搜索筛选项-文本
+    index: 0
+  通用操作.PDF耗时提示:
+    locator: [xpath, 内容较多时生成PDF的耗时较长，还请您耐心等待。]
+    operation: 校验PDF耗时提示
+    desc: 退出生成PDF功能时的提示文案
+    index: 0
+  通用操作.搜索入口:
+    locator: [xpath, '//android.widget.LinearLayout[@resource-id="com.onyx:id/tool_layout"]/android.widget.LinearLayout[3]/android.widget.ImageView']
+    operation: 点击笔记搜索入口
+    desc: 笔记首页工具栏中的搜索入口
+    index: 0
+  通用操作.本地笔记统计:
+    locator: [xpath, '//android.widget.TextView[@text="本地笔记： 目录 0 / 笔记 101"]']
+    operation: 获取本地笔记统计
+    desc: 备份恢复后本地笔记统计文本
+    index: 0
+  通用操作.最近笔记页签:
+    locator: [xpath, '//android.widget.FrameLayout[@resource-id="com.onyx:id/note_association_recent"]/android.widget.ImageView']
+    operation: 切换到最近笔记页签
+    desc: 笔记首页顶部最近笔记页签
+    index: 0
+  通用操作.收藏笔记页签:
+    locator: [xpath, '//android.widget.FrameLayout[@resource-id="com.onyx:id/note_association_tab1"]/android.widget.ImageView']
+    operation: 切换到收藏笔记页签
+    desc: 笔记首页顶部收藏笔记页签
+    index: 0
+  通用操作.WebDAV服务地址输入框:
+    locator: [id, 'com.onyx.android.ksync:id/url_edit']
+    operation: 输入WebDAV服务地址
+    desc: 第三方账号管理中WebDAV服务地址输入框
+    index: 0
+  通用操作.分享与导出按钮:
+    locator: [xpath, 分享与导出]
+    operation: 点击分享与导出按钮
+    desc: 笔记首页或笔记内的分享与导出入口
+    index: 0
+  通用操作.导出默认尺寸-首页:
+    locator: [xpath, '//android.widget.RadioButton[@resource-id="com.onyx:id/default_size"]']
+    operation: 获取首页导出默认尺寸
+    desc: 首页导出弹窗中的默认尺寸单选项
+    index: 0
+  通用操作.导出默认尺寸-笔记内:
+    locator: [xpath, '//android.widget.RadioButton[@resource-id="com.onyx.android.note:id/default_size"]']
+    operation: 获取笔记内导出默认尺寸
+    desc: 笔记内导出弹窗中的默认尺寸单选项
+    index: 0
+  通用操作.笔记内-更多按钮:
+    locator: [xpath, 更多]
+    operation: 点击笔记内更多按钮
+    desc: 笔记编辑页工具栏更多入口
+    index: 0
+  通用操作.笔记内-全刷按钮:
+    locator: [xpath, 全刷]
+    operation: 点击笔记内全刷按钮
+    desc: 笔记编辑页工具栏全刷入口
+    index: 0
+  通用操作.笔记内-搜索按钮:
+    locator: [xpath, 搜索]
+    operation: 点击笔记内搜索按钮
+    desc: 笔记编辑页工具栏搜索入口
+    index: 0
+  通用操作.笔记内-手势按钮:
+    locator: [xpath, 手势]
+    operation: 点击笔记内手势按钮
+    desc: 笔记编辑页工具栏手势入口
+    index: 0
+  通用操作.笔记内-缩放按钮:
+    locator: [xpath, 缩放]
+    operation: 点击笔记内缩放按钮
+    desc: 笔记编辑页工具栏缩放入口
+    index: 0
+  通用操作.笔记内-页面加按钮:
+    locator: [xpath, 页面+]
+    operation: 点击笔记内页面加按钮
+    desc: 笔记编辑页工具栏页面加入口
+    index: 0
+  通用操作.笔记内-文本框按钮:
+    locator: [xpath, 文本框]
+    operation: 点击笔记内文本框按钮
+    desc: 笔记编辑页工具栏文本框入口
+    index: 0
+  通用操作.笔记内-选项设置按钮:
+    locator: [xpath, 选项设置]
+    operation: 点击笔记内选项设置按钮
+    desc: 笔记编辑页工具栏选项设置入口
+    index: 0
+  通用操作.笔记内-导出菜单图标:
+    locator: [xpath, '(//android.widget.ImageView[@resource-id="com.onyx.android.note:id/menu_icon"])[7]']
+    operation: 点击笔记内导出菜单图标
+    desc: 笔记内工具栏第7个菜单图标（导出）
+    index: 0
+  通用操作.笔记内-导入确认按钮:
+    locator: [id, 'com.onyx.android.note:id/start_import']
+    name: 确定
+    operation: 点击笔记内导入确认按钮
+    desc: 导入笔记流程中的确认按钮
+    index: 0
+  通用操作.笔记内-返回按钮:
+    locator: [id, 'com.onyx.android.note:id/back_icon']
+    operation: 点击笔记内返回按钮
+    desc: 笔记编辑页返回按钮
+    index: 0
+  通用操作.笔记内-页码标题:
+    locator: [xpath, '//android.widget.TextView[@resource-id="com.onyx.android.note:id/title"]']
+    operation: 获取笔记内页码标题
+    desc: 笔记编辑页显示当前页/总页的标题
+    index: 0
+  通用操作.笔记内-标题入口:
+    locator: [id, 'com.onyx.android.note:id/title']
+    operation: 点击笔记内标题入口
+    desc: 笔记编辑页标题入口（进入缩略图）
+    index: 0
+  通用操作.笔记内-标题图标:
+    locator: [id, 'com.onyx.android.note:id/title_iv']
+    operation: 点击笔记内标题图标
+    desc: 部分版本缩略图返回按钮
+    index: 0
+  通用操作.笔记内-标题文本:
+    locator: [id, 'com.onyx.android.note:id/text_title']
+    operation: 点击笔记内标题文本
+    desc: 部分版本缩略图返回文本按钮
+    index: 0
+  通用操作.笔记列表页码信息:
+    locator: [id, 'com.onyx:id/page_info']
+    operation: 获取笔记列表页码信息
+    desc: 笔记列表翻页时显示的当前页/总页
+    index: 0
+  通用操作.文件管理页码信息:
+    locator: [id, 'com.onyx:id/textView_page_info']
+    operation: 获取文件管理页码信息
+    desc: 文件管理器翻页时显示的当前页/总页
+    index: 0
+  通用操作.返回按钮文本:
+    locator: [xpath, 返回]
+    operation: 点击返回按钮文本
+    desc: 笔记缩略图页面的返回文本按钮
+    index: 0
+  通用操作.关闭按钮:
+    locator: [id, 'com.onyx:id/btn_close']
+    operation: 点击关闭按钮
+    desc: 通用弹窗关闭按钮
+    index: 0
+  通用操作.本地备份入口:
+    locator: [id, 'com.onyx:id/local_backup']
+    operation: 点击本地备份入口
+    desc: 备份与恢复中的本地备份入口
+    index: 0
+  通用操作.删除按钮:
+    locator: [id, 'com.onyx:id/delete']
+    operation: 点击删除按钮
+    desc: 文件或笔记的删除按钮
+    index: 0
+  通用操作.追加模式:
+    locator: [id, 'com.onyx:id/append']
+    operation: 点击追加模式
+    desc: 恢复备份时的追加模式选项
+    index: 0
+  通用操作.清空输入按钮:
+    locator: [id, 'com.onyx:id/imageView_clear']
+    operation: 点击清空输入按钮
+    desc: 搜索输入框清空按钮
+    index: 0
+  通用操作.不可编辑PDF:
+    locator: [xpath, 不可编辑PDF]
+    operation: 选择不可编辑PDF
+    desc: 导出或分享时的不可编辑PDF选项
+    index: 0
+  屏幕比例.中间偏左_x比例:
+    operation: x轴中间偏左位置
+    desc: 用于按比例点击的x坐标比例
+  屏幕比例.中间偏上_y比例:
+    operation: y轴中间偏上位置
+    desc: 用于按比例点击的y坐标比例
+  屏幕比例.右侧_x比例:
+    operation: x轴右侧位置
+    desc: 右侧点击的x坐标比例
+  屏幕比例.底部_y比例:
+    operation: y轴底部位置
+    desc: 底部点击的y坐标比例

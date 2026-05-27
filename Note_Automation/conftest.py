@@ -268,11 +268,14 @@ def adb_clean_note(device_id):
 
 # --------------------- 测试初始化fixture ---------------------
 DEVICE_INFO_PRINTED = False
+_DRIVER_FAILURE_COUNT = 0
+_DRIVER_FAILURE_THRESHOLD = 3  # 连续 N 次 driver 重建失败则终止 session
 
 
 @pytest.fixture(scope='function', autouse=False)
 def note_test_initial():
     """测试初始化fixture，包含设备信息和环境准备"""
+    global _DRIVER_FAILURE_COUNT
     devices = Device_basic_information()
 
     device_id = None
@@ -298,10 +301,16 @@ def note_test_initial():
     # 清理设备数据
     adb_clean_note(device_id)
 
-    # 启动测试前先探活 driver，失败直接中断
+    # 启动测试前先探活 driver（带 session 重建），连续失败 N 次则终止 session
     try:
         ensure_driver_alive(reason="note_test_initial setup")
+        _DRIVER_FAILURE_COUNT = 0  # 成功后重置计数器
     except Exception as e:
+        _DRIVER_FAILURE_COUNT += 1
+        if _DRIVER_FAILURE_COUNT >= _DRIVER_FAILURE_THRESHOLD:
+            pytest.exit(
+                f"Driver 连续 {_DRIVER_FAILURE_COUNT} 次重建失败，终止测试 session: {_compact_exc_text(e)}"
+            )
         pytest.fail(str(e), pytrace=False)
     method = Operation_method(driver)
     from Note_Automation.Test_local_notes.Public_method import Public_method
@@ -344,7 +353,7 @@ def note_test_initial():
             except Exception as e:
                 logging.warning(f"启动引导检查失败，跳过开始使用点击：{e}")
 
-        if method.xpath_text_click("笔记",should_click=None):
+        if method.xpath_text_click("笔记",should_click=False):
             logging.debug("笔记应用启动成功")
             break
         logging.info("正在加载应用...")

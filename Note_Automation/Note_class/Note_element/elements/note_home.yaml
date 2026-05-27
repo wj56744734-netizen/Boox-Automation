@@ -1,0 +1,448 @@
+# 笔记自动化测试 — note_home 元素定位
+# 74 个元素
+
+elements:
+  笔记首页.创建手写笔记:
+    locator: [xpath, 手写笔记]
+    operation: 从创建菜单选择手写笔记
+    desc: 创建二级菜单中的"手写笔记"选项
+    index: 0
+  笔记首页.手写笔记创建:
+    locator: [xpath, 创建]
+    operation: 在手写笔记创建页点击创建
+    desc: 手写笔记创建页面的确认按钮
+    index: 0
+  笔记首页.快捷创建手写笔记:
+    locator: [xpath, 快捷创建]
+    operation: 快捷创建手写笔记
+    desc: 快捷创建一个手写笔记
+    index: 0
+  笔记首页.校验无边笔记:
+    locator: [xpath, 无边-1]
+    operation: 笔记首页校验无边笔记是否被创建
+    desc: 创建无边笔记后退出校验笔记首页是否有手写笔记
+    index: 0
+  笔记首页.文件夹名称输入框:
+    locator: [xpath, 文件夹名称]
+    operation: 点击文件夹名称输入框
+    desc: 创建文件夹时的名称输入框
+    index: 0
+  笔记首页.文件夹默认名称:
+    locator: [xpath, 文件夹-1]
+    operation: 输入示例文件夹名称
+    desc: 测试用的文件夹名称示例
+    index: 0
+  笔记首页.文件夹取消按钮:
+    locator: [xpath, 取消]
+    operation: 取消文件夹创建
+    desc: 文件夹创建弹窗的取消按钮
+    index: 0
+  笔记首页.弹窗通用确定按钮:
+    locator: [xpath, 确定]
+    operation: 确认创建文件夹
+    desc: 文件夹创建弹窗的确认按钮
+    index: 0
+  笔记首页.无笔记状态创建按钮:
+    locator: [xpath, 创建笔记]
+    operation: 点击创建笔记（无笔记状态）
+    desc: 无笔记时显示的创建入口
+    index: 0
+  笔记首页.校验手写笔记:
+    locator: [xpath, 笔记-1]
+    operation: 校验手写笔记是否创建成功
+    desc: 验证手写笔记在目录中显示
+    index: 0
+  笔记首页.校验文本笔记:
+    locator: [xpath, 文本-1]
+    operation: 校验文本笔记是否创建成功
+    desc: 验证文本笔记在目录中显示
+    index: 0
+  笔记首页.校验会议笔记:
+    locator: [xpath, 会议-1]
+    operation: 校验会议笔记是否创建成功
+    desc: 验证会议笔记在目录中显示（仅国内设备）
+    index: 0
+  笔记首页.有笔记状态创建按钮:
+    locator: [xpath, 创建]
+    name: 有笔记时创建按钮
+    operation: 点击创建图标
+    desc: 已有笔记时的创建入口
+    index: 0
+  笔记首页.更多菜单（父元素）:
+    locator: [id, 'com.onyx:id/tool_layout']
+    operation: 定位工具布局容器
+    desc: 更多菜单的父容器
+    index: 0
+  笔记首页.更多菜单按钮:
+    locator: [id, 'com.onyx:id/more_menu']
+    operation: 点击更多菜单按钮
+    desc: 触发更多选项的按钮
+    index: 0
+    parent_key: 笔记首页.更多菜单（父元素）
+  笔记首页.从本地文件导入:
+    locator: [xpath, 从本地文件]
+    operation: 选择从本地文件导入
+    desc: 创建菜单中"从本地文件"选项
+    index: 0
+  笔记首页.导入确认按钮:
+    locator: [xpath, 确认]
+    operation: 确认导入文件
+    desc: 选择文件后确认导入的按钮
+    index: 0
+  笔记首页.从本地文件导入引导:
+    locator: [xpath, 选择文件即可创建笔记]
+    operation: 确认从本地文件首次引导文案
+    desc: 首次点击从本地文件导入引导
+    index: 0
+  笔记首页.从本地文件导入引导确认:
+    locator: [xpath, 知道了]
+    operation: 确认从本地文件导入引导
+    desc: 首次从本地文件导入时引导弹窗确认按钮
+    index: 0
+  笔记首页.弹窗通用知道了:
+    locator: [xpath, 知道了]
+    operation: 关闭弹窗，知道了
+    index: 0
+  笔记首页.进入笔记首页:
+    locator: [xpath, 笔记]
+    name: 笔记首页入口
+    operation: 点击进入笔记首页
+    desc: 进入笔记应用入口
+    index: 0
+  笔记首页.工具按钮:
+    locator: [id, 'com.onyx:id/tool']
+    name: 工具菜单按钮
+    operation: 点击工具按钮
+    desc: 笔记列表页的工具选项入口
+    index: 3
+    parent_key: （子元素索引）
+  笔记首页.最近笔记入口:
+    locator: [id, 'com.onyx:id/tool']
+    child_locator: [class_name, 'android.widget.ImageView']
+    operation: 点击最近笔记入口
+    desc: 笔记首页工具栏中的最近笔记图标
+    index: 3
+  笔记首页.本地笔记入口:
+    locator: [id, 'com.onyx:id/tool']
+    child_locator: [class_name, 'android.widget.ImageView']
+    operation: 点击本地笔记入口
+    desc: 笔记首页工具栏中的本地笔记图标
+    index: 0
+  笔记首页.关联文档笔记入口:
+    locator: [id, 'com.onyx:id/tool']
+    child_locator: [class_name, 'android.widget.ImageView']
+    operation: 点击关联文档笔记入口
+    desc: 笔记首页工具栏中的关联文档笔记图标
+    index: 1
+  笔记首页.搜索笔记入口:
+    locator: [id, 'com.onyx:id/tool']
+    child_locator: [class_name, 'android.widget.ImageView']
+    operation: 点击搜索笔记入口
+    desc: 笔记首页工具栏中的搜索图标
+    index: 2
+  笔记首页.工具栏更多菜单:
+    locator: [id, 'com.onyx:id/tool_layout']
+    child_locator: [id, 'com.onyx:id/more_menu']
+    operation: 点击工具栏更多菜单
+    desc: 笔记首页工具栏右侧更多菜单按钮
+    index: 0
+  笔记首页.笔记首页切换样式:
+    locator: [id, 'com.onyx:id/style_iv']
+    operation: 点击切换视图模式
+    desc: 切换封面/列表/详细模式的按钮
+    index: 0
+  笔记首页.模式切换引导:
+    locator: [xpath, 点击即可快速切换封面模式、详细模式和列表模式]
+    name: 视图切换引导提示
+    operation: 校验引导提示
+    desc: 首次切换视图模式的引导信息
+    index: 0
+  笔记首页.视图引导确认:
+    locator: [xpath, 知道了]
+    name: 引导确认按钮
+    operation: 点击知道了
+    desc: 关闭视图切换引导提示
+    index: 0
+  笔记首页.新建文件夹:
+    locator: [xpath, 新建文件夹]
+    operation: 点击新建文件夹
+    desc: 更多菜单中的新建文件夹选项
+    index: 0
+  笔记首页.校验文件夹:
+    locator: [xpath, 文件夹-1]
+    name: 新建文件夹校验
+    operation: 校验文件夹是否创建
+    desc: 验证新建文件夹在目录中显示
+    index: 0
+  笔记首页.文件夹-1:
+    locator: [id, 'com.onyx:id/title']
+    name: 文件夹-1
+    operation: 点击/校验文件夹-1
+    desc: 新建的文件夹默认名称
+    index: 0
+  笔记首页.笔记-1:
+    locator: [id, 'com.onyx:id/title']
+    name: 笔记-1
+    operation: 点击/校验笔记-1
+    desc: 新建的手写笔记默认名称
+    index: 0
+  笔记首页.文本-1:
+    locator: [id, 'com.onyx:id/title']
+    name: 文本-1
+    operation: 点击/校验文本-1
+    desc: 新建的文本笔记默认名称
+    index: 0
+  笔记首页.会议-1:
+    locator: [id, 'com.onyx:id/title']
+    name: 会议-1
+    operation: 点击/校验会议-1
+    desc: 新建的会议笔记默认名称（仅国内设备）
+    index: 0
+  笔记首页.无边-1:
+    locator: [id, 'com.onyx:id/title']
+    name: 无边-1
+    operation: 点击/校验无边-1
+    desc: 新建的无边笔记默认名称
+    index: 0
+  笔记首页.标题栏:
+    locator: [id, 'com.onyx:id/title']
+    name: 页面标题栏
+    operation: 等待标题显示
+    desc: 验证页面标题是否正确
+    index: 0
+  笔记首页.清除当前笔记:
+    locator: [xpath, 清除当前笔记]
+    name: 清除单条记录
+    operation: 点击清除当前笔记
+    desc: 清除最近笔记中的单条记录
+    index: 0
+  笔记首页.清除全部记录:
+    locator: [xpath, 清除全部记录]
+    name: 清除所有记录
+    operation: 点击清除全部记录
+    desc: 清除最近笔记中的所有记录
+    index: 0
+  笔记首页.暂无笔记记录:
+    locator: [xpath, 暂无笔记记录]
+    name: 无记录提示
+    operation: 校验无记录状态
+    desc: 最近笔记为空时的提示文本
+    index: 0
+  笔记首页.打开手写笔记:
+    locator: [xpath, 笔记-1]
+    name: 笔记-1
+    operation: 进入 笔记-1 的手写笔记
+    desc: 进入 笔记-1 的手写笔记
+    index: 0
+  笔记首页.选中模板大方格:
+    locator: [id, 'com.onyx.android.note:id/tv_selected_bg']
+    name: 已选：常规\大方格 1
+    operation: 选中模板大方格 1
+    desc: 使用模板创建笔记后校验模板是否选中（大方格）
+    index: 0
+  笔记首页.创建笔记选中模板大方格:
+    locator: [id, 'com.onyx.android.note:id/title']
+    name: 大方格 1
+    operation: 选中模板后创建
+    desc: 选中模板后创建附带模板的手写笔记
+    index: 0
+  笔记首页.切换最近笔记(父元素):
+    locator: [class_name, android.widget.LinearLayout]
+    operation: 切换最近笔记(父元素)
+    desc: 切换最近笔记
+    index: 0
+  笔记首页.切换最近笔记(子元素):
+    locator: [id, 'com.onyx:id/note_association_recent']
+    operation: 切换最近笔记(父元素)
+    desc: 切换最近笔记
+    index: 5
+    parent_key: 笔记首页.切换最近笔记(父元素)
+  笔记首页.长按手写笔记:
+    locator: [id, 'com.onyx:id/title']
+    name: 笔记-1
+    operation: 长按手写笔记
+    desc: 笔记首页中长按笔记后执行长按相关操作
+  笔记首页.长按会议笔记:
+    locator: [id, 'com.onyx:id/title']
+    name: 会议-1
+    operation: 长按手写笔记
+    desc: 笔记首页中长按笔记后执行长按相关操作
+  笔记首页.长按文本笔记:
+    locator: [id, 'com.onyx:id/title']
+    name: 文本-1
+    operation: 长按手写笔记
+    desc: 笔记首页中长按笔记后执行长按相关操作
+  笔记首页.长按无边笔记:
+    locator: [id, 'com.onyx:id/title']
+    name: 无边-1
+    operation: 长按手写笔记
+    desc: 笔记首页中长按笔记后执行长按相关操作
+  笔记首页.更多-笔记设置:
+    locator: [xpath, 笔记设置]
+    operation: 进入更多菜单笔记设置
+    desc: 跳转进入更多-笔记设置页面
+  笔记首页.更多-批量管理:
+    locator: [xpath, 批量管理]
+    operation: 进入更多菜单批量管理
+    desc: 跳转进入更多-笔记批量管理
+  笔记首页.登录Webdav网盘:
+    locator: [xpath, WebDAV]
+    operation: 点击登录Webdav网盘
+    desc: 点击登录Webdav网盘
+  笔记首页.输入Webdav账号:
+    locator: [id, 'com.onyx.android.ksync:id/account']
+    name: webdav
+    operation: 输入Webdav账号
+  笔记首页.输入Webdav密码:
+    locator: [id, 'com.onyx.android.ksync:id/password']
+    name: webdavBoox
+    operation: 输入Webdav密码
+  笔记首页.退出笔记设置:
+    locator: [id, 'com.onyx:id/text_title']
+    name: 笔记设置
+    operation: 退出笔记设置
+    desc: 退出笔记设置
+  笔记首页.网盘导出位图PDF:
+    locator: [xpath, 位图PDF]
+    operation: 笔记导出网盘切换成位图PDF格式
+    desc: 笔记导出网盘切换成位图PDF格式
+  笔记首页.网盘导出note:
+    locator: [xpath, .note文件（BOOX笔记格式）]
+    operation: 笔记导出网盘切换成.note格式
+    desc: 笔记导出网盘切换成.note格式
+  笔记首页.同步弹窗开启导出笔记:
+    locator: [xpath, 启用笔记-导出功能]
+    operation: 登录网盘后开启笔记导出开关
+    desc: 登录网盘后开启笔记导出开关
+  笔记首页.测试文件笔记自动化测试文件:
+    locator: [xpath, 笔记自动化测试文件]
+    operation: 根目录下进入笔记自动化测试文件
+    desc: 根目录下进入笔记自动化测试文件
+  笔记首页.测试文件用例测试，从本地文件导入:
+    locator: [xpath, 用例测试，从本地文件导入]
+    operation: 根目录下进入笔记自动化测试文件
+    desc: 根目录下进入笔记自动化测试文件
+  笔记首页.平板桌面Dock栏（父元素）:
+    locator: [id, 'com.onyx:id/dock']
+    operation: 平板设备Dock栏
+    desc: 平板设备Dock栏
+    index: 0
+  笔记首页.平板Dock栏存储:
+    locator: [id, 'com.onyx:id/imageView_cover_border']
+    operation: 通过Dock栏进入存储
+    desc: 通过Dock栏进入存储
+    index: 2
+    parent_key: 笔记首页.平板桌面Dock栏（父元素）
+  笔记首页.进入设备存储根目录:
+    locator: [id, 'com.onyx:id/volume_name']
+    name: 存储
+    operation: 进入存储中跳转根目录下
+    desc: 进入存储中跳转根目录下
+    parent_key: 笔记首页.平板桌面Dock栏（父元素）
+  笔记首页.笔记常规菜单删除:
+    locator: [xpath, 删除]
+    name: 删除
+    operation: 笔记常规菜单点击删除按钮
+    desc: 笔记常规菜单点击删除按钮
+  笔记首页.笔记常规菜单删除引导:
+    locator: [id, 'com.onyx:id/textView_message']
+    name: '将会一并删除ONYX云端同步的笔记，是否确认？
+
+      （可从笔记回收站中恢复）'
+    operation: 删除笔记文件二次确认
+    desc: 删除笔记文件二次确认引导确认
+  笔记首页.笔记常规菜单删除引导取消:
+    locator: [id, 'com.onyx:id/button_negative']
+    name: 取消
+    operation: 删除笔记文件二次确认
+    desc: 删除笔记文件二次确认引导取消
+  笔记首页.笔记回收站:
+    locator: [xpath, 回收站]
+    name: 回收站
+    operation: 更多菜单进入笔记回收站
+    desc: 更多菜单中进入回收站
+  笔记首页.笔记回收站侧栏清空:
+    locator: [xpath, 清空]
+    name: 清空
+    operation: 回收站侧边工具栏清空
+    desc: 回收站侧边工具栏清空
+  笔记首页.笔记回收站侧栏清空引导:
+    locator: [id, 'com.onyx:id/textView_message']
+    name: 彻底删除后，将无法恢复！
+    operation: 笔记回收站侧栏清空引导
+    desc: 笔记回收站侧栏清空引导文案确认
+  笔记首页.笔记回收站侧栏清空引导取消:
+    locator: [id, 'com.onyx:id/button_negative']
+    name: 取消
+    operation: 笔记回收站侧栏清空引导取消
+    desc: 笔记回收站侧栏清空取消
+  笔记首页.笔记回收站无笔记:
+    locator: [id, 'com.onyx:id/no_search']
+    name: 未找到相关内容
+    operation: 笔记回收站无笔记状态
+    desc: 笔记回收站无笔记状态
+  笔记首页.常规菜单-移动:
+    locator: [xpath, 移动]
+    name: 移动
+    operation: 常规菜单移动按钮
+    desc: 常规菜单移动按钮
+  笔记首页.常规菜单-复制:
+    locator: [xpath, 复制]
+    name: 复制
+    operation: 常规菜单复制按钮
+    desc: 常规菜单复制按钮
+  笔记首页.常规菜单-复制根目录:
+    locator: [xpath, 根目录]
+    name: 根目录
+    operation: 复制内容至根目录
+    desc: 复制内容至根目录
+  笔记首页.常规菜单-校验复制成功:
+    locator: [xpath, 复制成功]
+    name: 复制成功
+    operation: 校验是否有toast复制成功
+    desc: 校验是否有toast复制成功
+  笔记首页.常规菜单-重命名:
+    locator: [xpath, 重命名]
+    name: 重命名
+    operation: 常规菜单重命名按钮
+    desc: 常规菜单重命名按钮
+  笔记首页.常规菜单-收藏:
+    locator: [xpath, 收藏]
+    name: 收藏
+    operation: 常规菜单收藏按钮
+    desc: 常规菜单收藏按钮
+  笔记首页.批量管理-合并:
+    locator: [xpath, 合并]
+    name: 合并
+    operation: 批量管理合并
+    desc: 批量管理合并
+  笔记首页.搜索标题筛选:
+    locator: [id, 'com.onyx:id/search_option']
+    child_locator: [id, 'com.onyx:id/title_checkbox']
+    operation: 点击/校验搜索标题筛选
+    desc: 笔记搜索页标题筛选复选框
+    index: 0
+  笔记首页.搜索手写筛选:
+    locator: [id, 'com.onyx:id/search_option']
+    child_locator: [id, 'com.onyx:id/scribble_checkbox']
+    operation: 点击/校验搜索手写筛选
+    desc: 笔记搜索页手写筛选复选框
+    index: 0
+  笔记首页.搜索文本筛选:
+    locator: [id, 'com.onyx:id/search_option']
+    child_locator: [id, 'com.onyx:id/text_checkbox']
+    operation: 点击/校验搜索文本筛选
+    desc: 笔记搜索页文本筛选复选框
+    index: 0
+  笔记首页.搜索标签筛选:
+    locator: [id, 'com.onyx:id/search_option']
+    child_locator: [id, 'com.onyx:id/tag_checkbox']
+    operation: 点击/校验搜索标签筛选
+    desc: 笔记搜索页标签筛选复选框
+    index: 0
+  笔记首页.搜索全库筛选:
+    locator: [id, 'com.onyx:id/search_option']
+    child_locator: [id, 'com.onyx:id/all_library_checkbox']
+    operation: 点击/校验搜索全库筛选
+    desc: 笔记搜索页全库筛选复选框
+    index: 0

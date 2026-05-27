@@ -1,0 +1,93 @@
+# 笔记自动化测试 — note_handwritten 元素定位
+# 15 个元素
+
+elements:
+  手写笔记.退出手写笔记:
+    locator: [id, 'com.onyx.android.note:id/back_icon']
+    operation: 退出手写笔记
+    desc: 手写笔记编辑页的返回按钮
+    index: 0
+  手写笔记.手写笔记入口:
+    locator: [xpath, '//*[@text="手写笔记"]']
+    name: 手写笔记
+    operation: 点击手写笔记
+    desc: 创建菜单中的手写笔记选项
+    index: 0
+  手写笔记.模板选中状态:
+    locator: [id, 'com.onyx.android.note:id/tv_selected_bg']
+    name: 模板选中标识
+    operation: 检查模板选中状态
+    desc: 显示已选模板的文本（如"已选：常规\空白"）
+    index: 0
+  手写笔记.笔记名称输入框:
+    locator: [id, 'com.onyx.android.note:id/note_name']
+    name: 笔记名称输入框
+    operation: 检查笔记名称
+    desc: 显示默认名称（如"笔记-1"）
+    index: 0
+  手写笔记.创建按钮:
+    locator: [id, 'com.onyx.android.note:id/btn_ok']
+    name: 手写笔记创建按钮
+    operation: 点击创建
+    desc: 确认创建手写笔记的按钮
+    index: 0
+  手写笔记.取消按钮:
+    locator: [id, 'com.onyx.android.note:id/btn_cancel']
+    name: 取消创建按钮
+    operation: 点击取消
+    desc: 取消创建手写笔记的按钮
+    index: 0
+  手写笔记.返回按钮:
+    locator: [id, 'com.onyx.android.note:id/tv_back']
+    name: 返回按钮
+    operation: 点击返回
+    desc: 从手写笔记创建页返回上一级
+    index: 0
+  手写笔记.分类-常规:
+    locator: [class_name, android.widget.TextView]
+    name: 常规分类
+    operation: 点击常规分类
+    desc: 模板分类中的"常规"选项
+    index: 4
+  手写笔记.分类-工作:
+    locator: [class_name, android.widget.TextView]
+    name: 工作分类
+    operation: 点击工作分类
+    desc: 模板分类中的"工作"选项
+    index: 5
+  手写笔记.分类-学习:
+    locator: [class_name, android.widget.TextView]
+    name: 学习分类
+    operation: 点击学习分类
+    desc: 模板分类中的"学习"选项
+    index: 6
+  手写笔记.分类-其他:
+    locator: [class_name, android.widget.TextView]
+    name: 其他分类
+    operation: 点击其他分类
+    desc: 模板分类中的"其他"选项
+    index: 7
+  手写笔记.分类-自定义:
+    locator: [class_name, android.widget.TextView]
+    name: 自定义分类
+    operation: 点击自定义分类
+    desc: 模板分类中的"自定义"选项
+    index: 8
+  手写笔记.工具条-首次引导标题:
+    locator: [id, 'com.onyx.android.note:id/tv_title']
+    name: 工具栏悬浮模式
+    operation: 首次进入笔记工具条引导标题
+    desc: 首次进入笔记工具条引导标题
+    index: 0
+  手写笔记.工具条-首次引导提示:
+    locator: [id, 'com.onyx.android.note:id/tv_desc']
+    name: 长按并拖拽工具栏，即可切换为悬浮模式。\n随心放置，释放更大书写空间。
+    operation: 首次进入笔记工具条引导内容（提示语）
+    desc: 首次进入笔记工具条引导内容（提示语）
+    index: 0
+  手写笔记.工具条-首次引导确认:
+    locator: [id, 'com.onyx.android.note:id/btn_ok']
+    name: 知道了
+    operation: 关闭工具条引导
+    desc: 关闭工具条引导
+    index: 0
