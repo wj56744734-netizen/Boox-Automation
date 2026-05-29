@@ -1,26 +1,16 @@
 from Note_Automation.config import driver
 from Note_Automation.Note_class.Note_class import Operation_method
-from Note_Automation.Test_local_notes.Public_method import Public_method
-from Note_Automation.Devices_list.Device_basic_information import Device_basic_information
+from Note_Automation.Test_local_notes.Public_method import Public_method, device_region
 from Note_Automation.conftest import note_mark_china, note_mark_abroad,note_mark_increment
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException
 import allure
 import pytest
 import logging
 import time
 
-
-
-
-#获取设备基础信息
-devices = Device_basic_information()
-try:
-    device_info = devices.get_device_info()
-except RuntimeError:
-    device_info = None
-device_region = device_info.get('device_region') if device_info else None
 @allure.feature("笔记创建相关测试类")
 class Test_create_notes:
 
@@ -38,16 +28,15 @@ class Test_create_notes:
         自动化用例 ： 用于测试在未登录状态下创建手写笔记的完整流程
         """""
 
-        # 平板桌面 点击笔记应用
-        self.method.xpath_text_click("笔记")
+        self.public.enter_note_app()
 
         # 无笔记未登记 点击创建笔记
-        self.method.xpath_text_click("创建笔记")
+        self.method.xpath_text_click(element_key="笔记首页.无笔记状态创建按钮")
 
         self.public.create_handwritten_notes()
 
         #校验当前目录是否正常创建手写笔记
-        self.method.xpath_text_click("笔记-1",None)
+        self.method.xpath_text_click(element_key="笔记首页.校验手写笔记", should_click=None)
 
 
     @note_mark_china("创建文本笔记")
@@ -58,16 +47,15 @@ class Test_create_notes:
         自动化测试用例 ： 用于测试在未登录状态下创建文本笔记的完整流程
         """""
 
-        # 平板桌面 点击笔记应用
-        self.method.xpath_text_click("笔记")
+        self.public.enter_note_app()
 
         # 点击“创建笔记”按钮
-        self.method.xpath_text_click("创建笔记")
+        self.method.xpath_text_click(element_key="笔记首页.无笔记状态创建按钮")
 
         self.public.create_text_notes()
 
         # 校验当前目录是否正常创建文本笔记
-        self.method.xpath_text_click("文本-1",None)
+        self.method.xpath_text_click(element_key="笔记首页.校验文本笔记", should_click=None)
 
 
     @note_mark_abroad("创建会议笔记")
@@ -78,11 +66,10 @@ class Test_create_notes:
         自动化测试用例 ： 用于测试在未登录状态下创建会议笔记的完整流程
         """""
 
-        # 平板桌面 点击笔记应用
-        self.method.xpath_text_click("笔记")
+        self.public.enter_note_app()
 
         # 点击“创建笔记”按钮
-        self.method.xpath_text_click("创建笔记")
+        self.method.xpath_text_click(element_key="笔记首页.无笔记状态创建按钮")
 
         # #判断设备地区后执行对应用例检查项
         if device_region == "国内" :
@@ -91,7 +78,7 @@ class Test_create_notes:
             self.public.create_meeting_notes()
 
             # 校验当前目录是否正常创建会议笔记
-            self.method.by_name_click(By.ID, "com.onyx:id/title", "会议-1")
+            self.method.by_name_click(element_key="笔记首页.会议-1")
 
         else:
 
@@ -106,23 +93,25 @@ class Test_create_notes:
         自动化测试用例，用于测试在未登录状态下使用快捷创建方式创建笔记的流程
         """""
 
-        # 平板桌面 点击笔记应用
-        self.method.xpath_text_click("笔记")
+        self.public.enter_note_app()
 
         # 点击“创建笔记”按钮
-        self.method.xpath_text_click("创建笔记")
+        self.method.xpath_text_click(element_key="笔记首页.无笔记状态创建按钮")
 
         # 创建菜单点击 快捷创建
         self.method.by_name_click(By.ID, "com.onyx:id/title", '快捷创建')
 
+        # 首次进入画布会出现工具条引导，先关闭再退出
+        self.public.dismiss_first_time_guide()
+
         # 退出手写笔记
-        self.method.by_element_click(By.ID, "com.onyx.android.note:id/back_icon")
+        self.method.by_element_click(element_key="通用操作.笔记内-返回按钮")
 
         # 校验当前目录是否正常创建手写笔记
-        self.method.xpath_text_click("笔记-1",None)
+        self.method.xpath_text_click(element_key="笔记首页.校验手写笔记", should_click=None)
 
         # 打开创建的手写笔记
-        self.method.xpath_text_click("笔记-1")
+        self.method.xpath_text_click(element_key="笔记首页.打开手写笔记")
 
 
     @note_mark_china("使用自定义模板创建")
@@ -135,23 +124,22 @@ class Test_create_notes:
 
         template = "大方格 1"
 
-        # 平板桌面 点击笔记应用
-        self.method.xpath_text_click("笔记")
+        self.public.enter_note_app()
 
         # 点击“创建笔记”按钮
-        self.method.xpath_text_click("创建笔记")
+        self.method.xpath_text_click(element_key="笔记首页.无笔记状态创建按钮")
 
         # 创建手写笔记，选择手写笔记类型、具体模板以及点击创建、退出等操作，
         self.create_handwritten_note(template)
 
         # 校验当前目录是否正常创建手写笔记
-        self.method.xpath_text_click("笔记-1",None)
+        self.method.xpath_text_click(element_key="笔记首页.校验手写笔记", should_click=None)
 
         # 有笔记状态点击创建
-        self.method.by_element_click(By.ID, "com.onyx:id/create_icon")
+        self.method.by_element_click(element_key="通用操作.创建按钮")
 
         # 点击手写笔记 --- 进入手写笔记创建页面
-        self.method.xpath_text_click("手写笔记")
+        self.method.xpath_text_click(element_key="笔记首页.创建手写笔记")
 
         # 校验是否选中了指定模板内容
         self.method.by_name_click(By.ID, "com.onyx.android.note:id/tv_selected_bg", "已选：常规\\" + template , None)
@@ -165,8 +153,7 @@ class Test_create_notes:
         自动化测试用例 ：用于测试新建一个笔记文件夹的完整流程
         """""
 
-        # 平板桌面 点击笔记应用
-        self.method.xpath_text_click("笔记")
+        self.public.enter_note_app()
 
         # 点击新建文件夹
         self.public.more_menus("新建文件夹")
@@ -174,7 +161,7 @@ class Test_create_notes:
         self.public.create_file()
 
         # 验证本地笔记中文件夹是否创建成功
-        self.method.xpath_text_click("文件夹-1")
+        self.method.xpath_text_click(element_key="笔记首页.校验文件夹")
 
 
     @note_mark_china("Reader 双开笔记")
@@ -190,41 +177,29 @@ class Test_create_notes:
     def test_39_note(self,note_test_initial):
         """本地创建手写笔记、文本笔记、会议笔记后查看最近笔记中是否有记录"""
 
-        # 平板桌面 点击笔记应用
-        self.method.xpath_text_click("笔记")
+        self.public.enter_note_app()
 
         # 无笔记未登记 点击创建笔记
-        self.method.xpath_text_click("创建笔记")
+        self.method.xpath_text_click(element_key="笔记首页.无笔记状态创建按钮")
 
         # 创建手写笔记
         self.public.create_handwritten_notes()
 
         # 有笔记状态点击创建
-        self.method.by_element_click(By.ID, "com.onyx:id/create_icon")
+        self.method.by_element_click(element_key="通用操作.创建按钮")
 
         # 创建文本笔记
         self.public.create_text_notes()
 
-        # 创建会议笔记
-        if device_region == "国内":
+        self.public.create_meeting_if_domestic()
 
-            # 有笔记状态点击创建
-            self.method.by_element_click(By.ID, "com.onyx:id/create_icon")
-
-            # 创建一个会议笔记
-            self.public.create_meeting_notes()
-
-        else:
-
-            logging.info("海外设备无会议笔记")
-
-        self.method.by_sub_index_click(By.ID, "com.onyx:id/tool", By.CLASS_NAME, "android.widget.ImageView", 3 )
+        self.method.by_sub_index_click(element_key="笔记首页.最近笔记入口")
 
         time.sleep(3)
 
-        self.method.xpath_text_click("笔记-1",None)
+        self.method.xpath_text_click(element_key="笔记首页.校验手写笔记", should_click=None)
 
-        self.method.xpath_text_click("文本-1",None)
+        self.method.xpath_text_click(element_key="笔记首页.校验文本笔记", should_click=None)
 
         if device_region == "国内":
 
@@ -240,45 +215,51 @@ class Test_create_notes:
 
             self.method.wait_for_press_name(By.ID,'com.onyx:id/title',f"{delete_note}")
 
-        self.method.xpath_text_click('清除当前笔记')
+        self.method.xpath_text_click(element_key='笔记首页.清除当前笔记')
+
+        # 等待"清除当前笔记"菜单消失，避免遮挡后续列表项
+        try:
+            WebDriverWait(driver, 5).until_not(
+                EC.presence_of_element_located((By.XPATH, '//*[@text="清除当前笔记"]'))
+            )
+        except Exception:
+            logging.warning("清除菜单未在 5 秒内消失，继续后续操作")
 
         try:
 
             wait = WebDriverWait(driver, 3)
 
             record_1 = wait.until(EC.element_to_be_clickable((By.XPATH, f'//*[@text="{delete_note}"]')))
-            if record_1:
-                logging.info("单个笔记记录清理失败")
-                return False
+            pytest.fail(f"单个笔记记录清理失败: {delete_note} 仍存在")
 
-        except:
+        except TimeoutException:
             logging.info("成功清理单个笔记记录")
 
-        self.method.wait_for_press_name(By.ID, 'com.onyx:id/title', '文本-1')
+        self.method.wait_for_press_name(element_key="笔记首页.文本-1")
 
-        self.method.xpath_text_click('清除全部记录')
+        self.method.xpath_text_click(element_key='笔记首页.清除全部记录')
 
-        record_2 = self.method.xpath_text_click('暂无笔记记录',should_click=None)
+        record_2 = self.method.xpath_text_click('暂无笔记记录', should_click=None)
 
-        if record_2:
-            logging.info('成功清理全部笔记记录')
+        assert record_2 is not None, "清除全部记录失败：未显示'暂无笔记记录'"
+        logging.info('成功清理全部笔记记录')
 
 
     @note_mark_china("列表模式创建笔记和文件夹")
     @note_mark_increment("增量")
     def test_51_list_create_notes(self,note_test_initial):
 
-        self.method.xpath_text_click("笔记")
+        self.public.enter_note_app()
 
-        self.method.by_element_click(By.ID,"com.onyx:id/style_iv")
+        self.method.by_element_click(element_key="笔记首页.笔记首页切换样式")
 
-        guide = self.method.xpath_text_click("点击即可快速切换封面模式、详细模式和列表模式",should_click=None)
+        guide = self.method.xpath_text_click(element_key="笔记首页.模式切换引导", should_click=None)
 
         if guide:
 
-            self.method.xpath_text_click("知道了")
+            self.method.xpath_text_click(element_key="笔记首页.弹窗通用知道了")
 
-            self.method.xpath_text_click("创建笔记")
+            self.method.xpath_text_click(element_key="笔记首页.无笔记状态创建按钮")
 
             self.public.create_boundless_notes()
 
@@ -294,13 +275,9 @@ class Test_create_notes:
 
             self.public.create_file()
 
-            self.method.xpath_text_click("文件夹-1",should_click=None)
+            self.method.xpath_text_click(element_key="笔记首页.校验文件夹", should_click=None)
 
-            if device_region == "国内":
-
-                self.method.xpath_text_click("创建")
-
-                self.public.create_meeting_notes()
+            self.public.create_meeting_if_domestic(text_click=True)
 
         else:
 
@@ -311,19 +288,19 @@ class Test_create_notes:
     @note_mark_increment("增量")
     def test_52_details_create_notes(self,note_test_initial):
 
-        self.method.xpath_text_click("笔记")
+        self.public.enter_note_app()
 
-        self.method.by_element_click(By.ID, "com.onyx:id/style_iv")
+        self.method.by_element_click(element_key="笔记首页.笔记首页切换样式")
 
-        guide = self.method.xpath_text_click("点击即可快速切换封面模式、详细模式和列表模式", should_click=None)
+        guide = self.method.xpath_text_click(element_key="笔记首页.模式切换引导", should_click=None)
 
         if guide:
 
-            self.method.xpath_text_click("知道了")
+            self.method.xpath_text_click(element_key="笔记首页.弹窗通用知道了")
 
-            self.method.by_element_click(By.ID, "com.onyx:id/style_iv")
+            self.method.by_element_click(element_key="笔记首页.笔记首页切换样式")
 
-            self.method.xpath_text_click("创建笔记")
+            self.method.xpath_text_click(element_key="笔记首页.无笔记状态创建按钮")
 
             self.public.create_boundless_notes()
 
@@ -339,13 +316,9 @@ class Test_create_notes:
 
             self.public.create_file()
 
-            self.method.xpath_text_click("文件夹-1", should_click=None)
+            self.method.xpath_text_click(element_key="笔记首页.校验文件夹", should_click=None)
 
-            if device_region == "国内":
-
-                self.method.xpath_text_click("创建")
-
-                self.public.create_meeting_notes()
+            self.public.create_meeting_if_domestic(text_click=True)
 
         else:
 
@@ -355,21 +328,21 @@ class Test_create_notes:
 
     def test_create_back(self,note_test_initial):
 
-        self.method.xpath_text_click("笔记")
+        self.public.enter_note_app()
 
-        self.method.xpath_text_click("创建笔记")
+        self.method.xpath_text_click(element_key="笔记首页.无笔记状态创建按钮")
 
         self.bake_create_menu("手写笔记")
 
         self.bake_create_menu("文本笔记")
 
-        # self.method.xpath_text_click("创建笔记")
+        # self.method.xpath_text_click(element_key="笔记首页.无笔记状态创建按钮")
 
-        self.method.xpath_text_click("快捷创建")
+        self.method.xpath_text_click(element_key="笔记首页.快捷创建手写笔记")
 
-        self.method.by_element_click(By.ID, 'com.onyx.android.note:id/back_icon')
+        self.method.by_element_click(element_key="通用操作.笔记内-返回按钮")
 
-        self.method.by_element_click(By.ID, "com.onyx:id/create_icon")
+        self.method.by_element_click(element_key="通用操作.创建按钮")
 
         time.sleep(0.5)
         self.bake_create_menu("手写笔记")
@@ -382,11 +355,11 @@ class Test_create_notes:
 
         self.method.xpath_text_click(note)
 
-        self.method.xpath_text_click("取消")
+        self.method.xpath_text_click(element_key="通用操作.取消按钮")
 
         self.method.xpath_text_click(note)
 
-        self.method.xpath_text_click("返回")
+        self.method.xpath_text_click(element_key="通用操作.返回按钮文本")
 
     def text_note_guide(self, steer_text , steer_button):
         """ 确认首次进入文本笔记时出现的引导提示 """
@@ -427,4 +400,6 @@ class Test_create_notes:
         self.method.by_name_click(By.ID, "com.onyx:id/title", "手写笔记")
         self.method.by_name_click(By.ID, "com.onyx.android.note:id/title", template)
         self.method.xpath_text_click("创建")
-        self.method.by_element_click(By.ID, "com.onyx.android.note:id/back_icon")
+        # 首次进入画布会出现工具条引导，先关闭再退出
+        self.public.dismiss_first_time_guide()
+        self.method.by_element_click(element_key="通用操作.笔记内-返回按钮")

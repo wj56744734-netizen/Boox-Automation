@@ -397,8 +397,8 @@ class Logcat:
 
     # ========== capture_logcat ==========
 
-    def capture_logcat(self, target_logs, single_timeout=80, block=True):
-        logging.debug(f"[capture_logcat] 开始捕获，target_logs={target_logs}, block={block}")
+    def capture_logcat(self, target_logs, single_timeout=80, block=True, strict=False):
+        logging.debug(f"[capture_logcat] 开始捕获，target_logs={target_logs}, block={block}, strict={strict}")
 
         # 等待前一个任务结束
         logging.debug("[capture_logcat] 等待获取串行锁...")
@@ -428,7 +428,7 @@ class Logcat:
 
         self._logcat_thread = Thread(
             target=self._run_logcat_capture,
-            args=(target_logs, single_timeout)
+            args=(target_logs, single_timeout, strict)
         )
         self._logcat_thread.daemon = True
         self._logcat_thread.start()
@@ -471,9 +471,9 @@ class Logcat:
         logging.debug(f"[is_running] 返回 {running}")
         return running
 
-    def _run_logcat_capture(self, target_logs, single_timeout):
+    def _run_logcat_capture(self, target_logs, single_timeout, strict=False):
         """批量目标日志捕获"""
-        logging.debug(f"[_run_logcat_capture] 线程开始执行，target_logs={target_logs}")
+        logging.debug(f"[_run_logcat_capture] 线程开始执行，target_logs={target_logs}, strict={strict}")
         try:
             try:
                 logging.debug("[_run_logcat_capture] 执行 adb logcat -c 清空缓冲区...")
@@ -535,6 +535,8 @@ class Logcat:
                             for target in targets:
                                 if (target in line
                                         and target not in matched_targets):
+                                    if strict and '--->' not in line:
+                                        continue
 
                                     container['detailed_matches'][target] = line.strip()
                                     matched_targets.add(target)

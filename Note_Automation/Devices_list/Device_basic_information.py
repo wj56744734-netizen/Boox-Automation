@@ -16,8 +16,6 @@ class Device_basic_information:
 
         global _CACHED_DEVICE_ID
 
-        logging.debug(f"当前模块缓存设备ID: {_CACHED_DEVICE_ID}")
-
         if _CACHED_DEVICE_ID is not None:
 
             return _CACHED_DEVICE_ID
@@ -69,8 +67,6 @@ class Device_basic_information:
 
         global _Version_Information
 
-        logging.debug(f"当前模块缓存安卓版本: {_Version_Information}")
-
         if _Version_Information is not None:
 
             return _Version_Information
@@ -91,8 +87,6 @@ class Device_basic_information:
         """"" 获取设备指纹信息 """""
 
         global _Fingerprint_information
-
-        logging.debug(f"当前模块缓存的指纹信息: {_Fingerprint_information}")
 
         if _Fingerprint_information is not None:
 

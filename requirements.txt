@@ -1,21 +1,11 @@
-# 项目要求 Python >= 3.10（代码使用了 PEP 604 联合类型语法）
-#
-# --- 测试框架核心 ---
-pytest>=7.4,<9
-pytest-rerunfailures>=15,<17
 allure-pytest>=2.13,<3
-
-# --- 移动端自动化 ---
 Appium-Python-Client>=2.10,<4
-selenium>=4.9,<5
-
-# --- 主测试链路（文件/数据校验） ---
-openpyxl>=3.1,<4
-pypdf>=4,<6
-
-# --- 仅 scripts/Note_page_contrast 使用（页面比对脚本，可选） ---
 numpy>=1.26,<3
 opencv-python>=4.10,<5
-scikit-image>=0.22,<1
+openpyxl>=3.1,<4
+pytest>=7.4,<9
+pytest-rerunfailures>=15,<17
+PyYAML>=6,<7
 requests>=2.31,<3
-
+scikit-image>=0.22,<1
+selenium>=4.9,<5

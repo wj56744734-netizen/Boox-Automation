@@ -1,7 +1,9 @@
 import contextvars
 from functools import wraps
 import logging
+import sys
 import time
+from pathlib import Path
 from selenium.common.exceptions import (
     TimeoutException,
     StaleElementReferenceException,
@@ -47,8 +49,12 @@ _element_ctx: contextvars.ContextVar = contextvars.ContextVar('_element_ctx', de
 
 
 def _push_element_ctx(method_name: str, element_key: str):
-    """Set current element context so downstream errors carry the original element_key."""
-    _element_ctx.set({'method': method_name, 'element_key': element_key})
+    """Push current method context so downstream errors carry the full call chain."""
+    ctx = _element_ctx.get()
+    if ctx is None:
+        ctx = []
+    ctx.append({'method': method_name, 'element_key': element_key})
+    _element_ctx.set(ctx)
 
 
 def _format_call_label(func_name, filtered_args):
@@ -100,6 +106,20 @@ def retry_and_handle_exceptions(max_retries=3, retry_delay=1):
             ek = kwargs.get('element_key')
             if ek:
                 call_label = f"{func.__name__}(element_key='{ek}')"
+            elif not filtered_args:
+                # 没有 positional args 时从 kwargs 提取定位信息
+                xpath_val = kwargs.get('xpath')
+                locator_val = kwargs.get('locator')
+                name_val = kwargs.get('name')
+                if xpath_val and xpath_val != By.XPATH:
+                    display = str(xpath_val)
+                    if len(display) > 60:
+                        display = display[:57] + "..."
+                    call_label = f"{func.__name__}(xpath='{display}')"
+                elif locator_val:
+                    call_label = f"{func.__name__}(locator='{locator_val}')"
+                elif name_val:
+                    call_label = f'{func.__name__}("{name_val}")'
 
             last_exc = None
             for attempt in range(max_retries):
@@ -125,7 +145,8 @@ def retry_and_handle_exceptions(max_retries=3, retry_delay=1):
                     time.sleep(retry_delay)
 
             desc = _annotate_with_catalog(filtered_args)
-            ctx = _element_ctx.get()
+            ctx_list = _element_ctx.get()
+            ctx = ctx_list[-1] if ctx_list else None
             ctx_key = ctx.get('element_key') if ctx else None
             ctx_method = ctx.get('method') if ctx else None
             ek = kwargs.get('element_key')  # directly passed to this method
@@ -143,14 +164,21 @@ def retry_and_handle_exceptions(max_retries=3, retry_delay=1):
                         lines.append(f'  ↳ 定位:   {loc[0]}="{loc[1]}"')
                 except Exception:
                     pass
+            else:
+                # 没有 element_key 时从 kwargs 显示原始定位
+                xpath_val = kwargs.get('xpath')
+                locator_val = kwargs.get('locator')
+                if xpath_val and xpath_val != By.XPATH:
+                    lines.append(f'  ↳ 定位:   xpath="{xpath_val}"')
+                elif locator_val:
+                    lines.append(f'  ↳ 定位:   "{locator_val}"')
 
-            # Show element_key & YAML source; add source method for context-propagated keys
+            # Show element_key & YAML source
             if display_key:
                 if ek:
                     lines.append(f"  ↳ 元素键: {ek}")
                 else:
-                    via = f" (来自 {ctx_method})" if ctx_method else ""
-                    lines.append(f"  ↳ 元素键: {ctx_key}{via}")
+                    lines.append(f"  ↳ 元素键: {ctx_key}")
                 try:
                     src = args[0].get_element_source(display_key)
                     if src:
@@ -159,6 +187,25 @@ def retry_and_handle_exceptions(max_retries=3, retry_delay=1):
                         lines.append(f"  ↳ YAML:   {tag}")
                 except Exception:
                     pass
+
+            # Show call chain: public API methods that led to this failure
+            if ctx_list:
+                callers = [item['method'] for item in ctx_list if item.get('method')]
+                # 去掉与当前失败方法重复的最后一个调用者
+                while callers and callers[-1] == func.__name__:
+                    callers.pop()
+                if callers:
+                    chain = ' → '.join(callers) + f' → {func.__name__}'
+                    lines.append(f'  ↳ 调用链: {chain}')
+
+            # Show origin location: first frame outside Note_class.py
+            f = sys._getframe()
+            while f:
+                fname = f.f_code.co_filename
+                if 'Note_class.py' not in fname:
+                    lines.append(f'  ↳ 触发位置: {Path(fname).name}:{f.f_lineno}')
+                    break
+                f = f.f_back
 
             if desc:
                 lines.append(f"  ↳ 元素用途: {desc}")
@@ -417,12 +464,16 @@ class Base_note_class:
     def xpath_element_is_clickable(self, element_key=None, xpath=By.XPATH,
                                     locator=None, timeout=None):
         """等待 XPath 元素可点击（支持 YAML / 动态 / 直接字符串）。"""
+        if element_key is not None:
+            _push_element_ctx('xpath_element_is_clickable', element_key)
         return self._wait_for_xpath(element_key, xpath, locator, timeout, need_clickable=True)
 
     @retry_and_handle_exceptions()
     def xpath_element_visible(self, element_key=None, xpath=By.XPATH,
                                locator=None, timeout=None):
         """等待 XPath 元素可见（支持 YAML / 动态 / 直接字符串）。"""
+        if element_key is not None:
+            _push_element_ctx('xpath_element_visible', element_key)
         return self._wait_for_xpath(element_key, xpath, locator, timeout, need_clickable=False)
 
     @retry_and_handle_exceptions()
@@ -551,18 +602,22 @@ class Operation_method(Base_note_class):
             loc_type, text_value = info['locator']
             if loc_type != By.XPATH:
                 raise AssertionError(f"元素 '{element_key}' 的定位类型必须是 XPath，当前为 {loc_type}")
+            display = info.get('operation') or info.get('name') or text_value
+            step_msg = f"点击「{display}」" if should_click else f"校验存在「{display}」"
         elif name is not None:
+            _push_element_ctx('xpath_text_click', None)
             text_value = name
+            step_msg = f"点击\"{name}\"" if should_click else f"校验存在\"{name}\""
         else:
             raise AssertionError("必须提供 name 或 element_key")
 
-        if should_click:
-            # 点击路径统一走 _safe_click，确保"等待后真实点击"
-            return self._safe_click(By.XPATH, text_value)
-        else:
-            if self._is_xpath_expression(text_value):
-                return self.xpath_element_visible(xpath=text_value)
-            return self.xpath_check_display_timeout(text_value)
+        with allure.step(step_msg):
+            if should_click:
+                return self._safe_click(By.XPATH, text_value)
+            else:
+                if self._is_xpath_expression(text_value):
+                    return self.xpath_element_visible(xpath=text_value)
+                return self.xpath_check_display_timeout(text_value)
 
     def xpath_parent_click(self, xpath=None, *, element_key=None, by=None, locator=None, should_click=True):
         """
@@ -572,23 +627,30 @@ class Operation_method(Base_note_class):
         3. xpath_parent_click(by=By.XPATH, locator="//...")
         """
         if xpath is not None:
+            _push_element_ctx('xpath_parent_click', None)
             final_by, final_locator = By.XPATH, xpath
+            step_msg = f"父节点点击({final_by}, {final_locator})" if should_click else f"父节点校验({final_by}, {final_locator})"
         elif by is not None and locator is not None:
+            _push_element_ctx('xpath_parent_click', None)
             final_by, final_locator = by, locator
+            step_msg = f"父节点点击({final_by}, {final_locator})" if should_click else f"父节点校验({final_by}, {final_locator})"
         elif element_key is not None:
             _push_element_ctx('xpath_parent_click', element_key)
             info = self.get_element(element_key)
             final_by, final_locator = info['locator']
+            display = info.get('operation') or info.get('name') or str(final_locator)
+            step_msg = f"父节点点击「{display}」" if should_click else f"父节点校验「{display}」"
         else:
             raise AssertionError("必须提供 xpath、element_key 或 (by, locator) 之一")
 
-        if should_click:
-            return self._safe_click(final_by, final_locator)
-        else:
-            if final_by == By.XPATH:
-                return self.xpath_element_visible(xpath=final_locator)
+        with allure.step(step_msg):
+            if should_click:
+                return self._safe_click(final_by, final_locator)
             else:
-                return self.check_display_timeout(by=final_by, locator=final_locator)
+                if final_by == By.XPATH:
+                    return self.xpath_element_visible(xpath=final_locator)
+                else:
+                    return self.check_display_timeout(by=final_by, locator=final_locator)
 
     # ---- 父子元素定位 ----
 
@@ -609,42 +671,46 @@ class Operation_method(Base_note_class):
                 raise AssertionError(f"元素 '{element_key}' 缺少 'child_locator' 字段")
             child_by, child_loc = child_info
             child_index = index if index != 0 else info.get('index', 0)
+            display = info.get('operation') or info.get('name') or str(child_loc)
+            step_msg = f"子元素「{display}」"
         elif (by_method is not None and locator is not None
               and by_method1 is not None and locator1 is not None):
             parent_by, parent_loc = by_method, locator
             child_by, child_loc = by_method1, locator1
             child_index = index
+            step_msg = f"子元素[{child_index}]({child_loc})"
         else:
             raise AssertionError(
                 "必须提供 element_key 或 (by_method, locator, by_method1, locator1)")
 
-        try:
-            parent_element = self.check_timeout(parent_by, parent_loc)
-            if not parent_element:
-                logging.error(f"未找到父元素: {parent_loc}")
-                return None
-            if not parent_element.is_displayed():
-                logging.error(f"父元素 {parent_loc} 不可见")
-                return None
+        with allure.step(step_msg):
+            try:
+                parent_element = self.check_timeout(parent_by, parent_loc)
+                if not parent_element:
+                    logging.error(f"未找到父元素: {parent_loc}")
+                    return None
+                if not parent_element.is_displayed():
+                    logging.error(f"父元素 {parent_loc} 不可见")
+                    return None
 
-            child_elements = parent_element.find_elements(child_by, child_loc)
-            if not child_elements:
-                logging.error(f"在父元素 {parent_loc} 下未找到子元素: {child_loc}")
-                return None
+                child_elements = parent_element.find_elements(child_by, child_loc)
+                if not child_elements:
+                    logging.error(f"在父元素 {parent_loc} 下未找到子元素: {child_loc}")
+                    return None
 
-            if child_index < 0 or child_index >= len(child_elements):
-                logging.error(f"子元素索引 {child_index} 越界，列表长度为 {len(child_elements)}")
-                return None
+                if child_index < 0 or child_index >= len(child_elements):
+                    logging.error(f"子元素索引 {child_index} 越界，列表长度为 {len(child_elements)}")
+                    return None
 
-            target_element = child_elements[child_index]
-            logging.debug(f"成功定位到子元素，索引: {child_index}，总数量: {len(child_elements)}")
-            if should_click:
-                target_element.click()
-                logging.debug(f"已点击子元素，索引: {child_index}")
-            return target_element
-        except Exception as e:
-            logging.error(f"定位子元素过程中发生错误: {str(e)}")
-            return None
+                target_element = child_elements[child_index]
+                logging.debug(f"成功定位到子元素，索引: {child_index}，总数量: {len(child_elements)}")
+                if should_click:
+                    target_element.click()
+                    logging.debug(f"已点击子元素，索引: {child_index}")
+                return target_element
+            except Exception as e:
+                logging.error(f"定位子元素过程中发生错误: {str(e)}")
+                return None
 
     def by_father_index_click(self, by_method=None, locator=None,
                                by_method1=None, locator1=None,
@@ -662,37 +728,41 @@ class Operation_method(Base_note_class):
                 raise AssertionError(f"元素 '{element_key}' 缺少 'child_locator' 字段")
             child_by, child_loc = child_info
             parent_index = index if index != 0 else info.get('index', 0)
+            display = info.get('operation') or info.get('name') or str(child_loc)
+            step_msg = f"父级下标[{parent_index}]「{display}」"
         elif (by_method is not None and locator is not None
               and by_method1 is not None and locator1 is not None):
             parent_by, parent_loc = by_method, locator
             child_by, child_loc = by_method1, locator1
             parent_index = index
+            step_msg = f"父级下标[{parent_index}]({child_loc})"
         else:
             raise AssertionError(
                 "必须提供 element_key 或 (by_method, locator, by_method1, locator1)")
 
-        parent_elements = self.check_list_timeout(parent_by, parent_loc)
-        if parent_index >= len(parent_elements):
-            logging.error(f"下标({parent_index})越界，无法获取元素")
-            logging.error(f"当前列表长度 ({len(parent_elements)})")
-            return False
+        with allure.step(step_msg):
+            parent_elements = self.check_list_timeout(parent_by, parent_loc)
+            if parent_index >= len(parent_elements):
+                logging.error(f"下标({parent_index})越界，无法获取元素")
+                logging.error(f"当前列表长度 ({len(parent_elements)})")
+                return False
 
-        parent_element = parent_elements[parent_index]
-        if not parent_element.is_displayed():
-            logging.error(f"未找到 {parent_loc} 父元素")
-            return False
+            parent_element = parent_elements[parent_index]
+            if not parent_element.is_displayed():
+                logging.error(f"未找到 {parent_loc} 父元素")
+                return False
 
-        child_element = parent_element.find_elements(child_by, child_loc)
-        if child_element is not None:
-            self.check_timeout(child_by, child_loc)
-            if should_click:
-                if len(child_element) == 0:
-                    logging.error(f"未找到 {child_loc} 子元素")
-                    return False
-                child_element[0].click()
-                return True
-            return child_element[0].text
-        return False
+            child_element = parent_element.find_elements(child_by, child_loc)
+            if child_element is not None:
+                self.check_timeout(child_by, child_loc)
+                if should_click:
+                    if len(child_element) == 0:
+                        logging.error(f"未找到 {child_loc} 子元素")
+                        return False
+                    child_element[0].click()
+                    return True
+                return child_element[0].text
+            return False
 
     def by_father_sub_index_click(self, by_method=None, locator=None,
                                    by_method1=None, locator1=None,
@@ -711,42 +781,46 @@ class Operation_method(Base_note_class):
             child_by, child_loc = child_info
             parent_index = index if index != 0 else info.get('index', 0)
             sub_index = index_1 if index_1 != 0 else info.get('sub_index', 0)
+            display = info.get('operation') or info.get('name') or str(child_loc)
+            step_msg = f"父级下标[{parent_index}]子元素[{sub_index}]「{display}」"
         elif (by_method is not None and locator is not None
               and by_method1 is not None and locator1 is not None):
             parent_by, parent_loc = by_method, locator
             child_by, child_loc = by_method1, locator1
             parent_index = index
             sub_index = index_1
+            step_msg = f"父级下标[{parent_index}]子元素[{sub_index}]({child_loc})"
         else:
             raise AssertionError(
                 "必须提供 element_key 或 (by_method, locator, by_method1, locator1)")
 
-        parent_elements = self.check_list_timeout(parent_by, parent_loc)
-        if parent_index >= len(parent_elements):
-            logging.error(f"下标({parent_index})越界，无法获取元素")
-            logging.error(f"当前列表长度 ({len(parent_elements)})")
-            return False
-
-        parent_element = parent_elements[parent_index]
-        if not parent_element.is_displayed():
-            logging.error(f"未找到 {parent_loc} 父元素")
-            return False
-
-        child_element = parent_element.find_elements(child_by, child_loc)
-        if child_element is not None:
-            self.check_timeout(child_by, child_loc)
-            if sub_index >= len(child_element):
-                logging.error(f"下标({sub_index})越界，无法获取元素")
-                logging.error(f"当前列表长度 ({len(child_element)})")
+        with allure.step(step_msg):
+            parent_elements = self.check_list_timeout(parent_by, parent_loc)
+            if parent_index >= len(parent_elements):
+                logging.error(f"下标({parent_index})越界，无法获取元素")
+                logging.error(f"当前列表长度 ({len(parent_elements)})")
                 return False
-            if should_click:
-                if len(child_element) == 0:
-                    logging.error(f"未找到 {child_loc} 子元素")
+
+            parent_element = parent_elements[parent_index]
+            if not parent_element.is_displayed():
+                logging.error(f"未找到 {parent_loc} 父元素")
+                return False
+
+            child_element = parent_element.find_elements(child_by, child_loc)
+            if child_element is not None:
+                self.check_timeout(child_by, child_loc)
+                if sub_index >= len(child_element):
+                    logging.error(f"下标({sub_index})越界，无法获取元素")
+                    logging.error(f"当前列表长度 ({len(child_element)})")
                     return False
-                child_element[sub_index].click()
-                return True
-            return child_element[sub_index].text
-        return False
+                if should_click:
+                    if len(child_element) == 0:
+                        logging.error(f"未找到 {child_loc} 子元素")
+                        return False
+                    child_element[sub_index].click()
+                    return True
+                return child_element[sub_index].text
+            return False
 
     # ---- ID/CLASS_NAME 定位 ----
 
@@ -762,16 +836,20 @@ class Operation_method(Base_note_class):
             locator_type, locator_value = loc['by'], loc['value']
             self._validate_locator_type(locator_type, (By.ID, By.CLASS_NAME),
                                         f"by_element_click[{element_key}]")
+            step_msg = f"「{loc['operation']}」"
         elif by_method is not None and locator is not None:
+            _push_element_ctx('by_element_click', None)
             locator_type, locator_value = by_method, locator
+            step_msg = f"点击({locator_type}, {locator_value})"
         else:
             raise AssertionError("必须提供 element_key 或 (by_method, locator)")
 
-        if should_click:
-            return self._safe_click(locator_type, locator_value)
-        else:
-            element = self.check_timeout(locator_type, locator_value)
-            return element
+        with allure.step(step_msg):
+            if should_click:
+                return self._safe_click(locator_type, locator_value)
+            else:
+                element = self.check_timeout(locator_type, locator_value)
+                return element
 
     # ---- 按名称匹配列表元素 ----
 
@@ -786,28 +864,32 @@ class Operation_method(Base_note_class):
             loc = self._resolve_locator(element_key, require_name=True)
             locator_type, locator_value = loc['by'], loc['value']
             target_name = name or loc['name']
+            step_msg = f"列表{'点击' if should_click else '查找'}「{target_name}」"
         elif by_method is not None and locator is not None:
+            _push_element_ctx('by_name_click', None)
             locator_type, locator_value = by_method, locator
             if not name:
                 raise AssertionError("动态元素必须传入 name 参数")
             target_name = name
+            step_msg = f"列表{'点击' if should_click else '查找'}\"{target_name}\""
         else:
             raise AssertionError("必须提供 element_key 或 (by_method, locator, name)")
 
-        elements = self.check_list_timeout(locator_type, locator_value)
-        target = str(target_name).strip()
-        for element in elements:
-            try:
-                actual = (element.text or "").strip()
-            except StaleElementReferenceException:
-                continue
-            if actual == target:
-                logging.debug(f"[DEBUG] 匹配到文本 '{target}' 的元素")
-                if should_click:
-                    element.click()
-                return element
-        logging.error(f"在 {locator_value} 列表中未匹配到文本：{target}")
-        return False
+        with allure.step(step_msg):
+            elements = self.check_list_timeout(locator_type, locator_value)
+            target = ' '.join(str(target_name).split())
+            for element in elements:
+                try:
+                    actual = ' '.join((element.text or "").split())
+                except StaleElementReferenceException:
+                    continue
+                if actual == target:
+                    logging.debug(f"[DEBUG] 匹配到文本 '{target}' 的元素")
+                    if should_click:
+                        element.click()
+                    return element
+            logging.error(f"在 {locator_value} 列表中未匹配到文本：{target}")
+            return False
 
     # ---- 按索引+名称联合定位 ----
 
@@ -823,31 +905,34 @@ class Operation_method(Base_note_class):
             locator_type, locator_value = loc['by'], loc['value']
             target_name = name or loc['name']
             target_index = index if index != 0 else loc['index']
+            step_msg = f"下标[{target_index}]校验「{target_name}」"
         elif by_method is not None and locator is not None:
             locator_type, locator_value = by_method, locator
             target_name = name
             target_index = index
             if not target_name:
                 raise AssertionError("动态元素必须传入 name 参数")
+            step_msg = f"下标[{target_index}]校验\"{target_name}\""
         else:
             raise AssertionError("必须提供 element_key 或 (by_method, locator, name)")
 
-        elements = self.check_list_timeout(locator_type, locator_value)
-        if not elements:
-            logging.error(f"未找到 {locator_value} 元素")
-            return False
-        if target_index < len(elements):
-            element = elements[target_index]
-            if should_click:
-                element.click()
-            if element.text != target_name:
-                logging.debug(f"[DEBUG] 校验元素文本：预期 {target_name}，实际 {element.text}")
-                logging.error(f"未找到 '{target_name}' 元素")
+        with allure.step(step_msg):
+            elements = self.check_list_timeout(locator_type, locator_value)
+            if not elements:
+                logging.error(f"未找到 {locator_value} 元素")
                 return False
-            return True
-        else:
-            logging.error(f"下标({target_index})越界，无法获取元素")
-            return False
+            if target_index < len(elements):
+                element = elements[target_index]
+                if should_click:
+                    element.click()
+                if element.text != target_name:
+                    logging.debug(f"[DEBUG] 校验元素文本：预期 {target_name}，实际 {element.text}")
+                    logging.error(f"未找到 '{target_name}' 元素")
+                    return False
+                return True
+            else:
+                logging.error(f"下标({target_index})越界，无法获取元素")
+                return False
 
     # ---- 按索引定位 ----
 
@@ -861,28 +946,32 @@ class Operation_method(Base_note_class):
             loc = self._resolve_locator(element_key, require_index=True)
             locator_type, locator_value = loc['by'], loc['value']
             target_index = index if index != 0 else loc['index']
+            display = loc.get('operation') or loc.get('name') or str(locator_value)
+            step_msg = f"列表下标[{target_index}]「{display}」"
         elif by_method is not None and locator is not None:
             locator_type, locator_value = by_method, locator
             target_index = index
+            step_msg = f"列表下标[{target_index}]({locator_value})"
         else:
             raise AssertionError("必须提供 element_key 或 (by_method, locator)")
 
-        elements = self.check_list_timeout(locator_type, locator_value)
-        if not elements:
-            logging.error(f"未找到 {locator_value} 元素")
-            return False
-        if target_index < len(elements):
-            element = elements[target_index]
-            if should_click:
-                if element.is_enabled():
-                    element.click()
-                else:
-                    logging.error(f"元素不能点击")
-                    return False
-            return True
-        else:
-            logging.error(f"下标({target_index})越界，无法获取元素")
-            return False
+        with allure.step(step_msg):
+            elements = self.check_list_timeout(locator_type, locator_value)
+            if not elements:
+                logging.error(f"未找到 {locator_value} 元素")
+                return False
+            if target_index < len(elements):
+                element = elements[target_index]
+                if should_click:
+                    if element.is_enabled():
+                        element.click()
+                    else:
+                        logging.error(f"元素不能点击")
+                        return False
+                return True
+            else:
+                logging.error(f"下标({target_index})越界，无法获取元素")
+                return False
 
     # ---- Toast 检测 ----
 
@@ -896,8 +985,10 @@ class Operation_method(Base_note_class):
         if toast_true_key is not None:
             info = self._resolve_locator(toast_true_key)
             expected_toast_message = info.get('name') or info.get('value') or toast_true or ''
+            step_msg = f"等待Toast「{expected_toast_message}」"
         elif toast_true is not None:
             expected_toast_message = toast_true
+            step_msg = f"等待Toast\"{expected_toast_message}\""
         else:
             raise AssertionError("必须提供 toast_true 或 toast_true_key")
 
@@ -907,16 +998,17 @@ class Operation_method(Base_note_class):
         else:
             abnormal_toast_message = toast_false
 
-        start_time = time.time()
-        while time.time() - start_time < toast_timeout:
-            page_source = self.driver.page_source
-            if expected_toast_message in page_source:
-                return True
-            elif abnormal_toast_message is not None:
-                if abnormal_toast_message in page_source:
-                    return False
-            time.sleep(1)
-        return False
+        with allure.step(step_msg):
+            start_time = time.time()
+            while time.time() - start_time < toast_timeout:
+                page_source = self.driver.page_source
+                if expected_toast_message in page_source:
+                    return True
+                elif abnormal_toast_message is not None:
+                    if abnormal_toast_message in page_source:
+                        return False
+                time.sleep(1)
+            return False
 
     # ---- 输入框 ----
 
@@ -932,25 +1024,29 @@ class Operation_method(Base_note_class):
             input_text = name or loc.get('name')
             if not input_text:
                 raise AssertionError(f"元素 '{element_key}' 未配置 'name' 字段且未传入 name 参数")
+            display = loc.get('operation') or loc.get('name') or str(locator_value)
+            step_msg = f"输入\"{input_text}\" →「{display}」"
         elif by_method is not None and locator is not None:
             locator_type, locator_value = by_method, locator
             input_text = name
             if not input_text:
                 raise AssertionError("必须提供 name 参数（输入内容）")
+            step_msg = f"输入\"{input_text}\" → ({locator_type}, {locator_value})"
         else:
             raise AssertionError("必须提供 element_key 或 (by_method, locator, name)")
 
-        input_box = self.check_timeout(locator_type, locator_value)
-        self._clear_input(input_box)
-        if hasattr(input_box, 'set_text'):
-            input_box.set_text(input_text)
-        else:
-            input_box.send_keys(input_text)
-        try:
-            self.driver.hide_keyboard()
-        except Exception:
-            pass
-        return True
+        with allure.step(step_msg):
+            input_box = self.check_timeout(locator_type, locator_value)
+            self._clear_input(input_box)
+            if hasattr(input_box, 'set_text'):
+                input_box.set_text(input_text)
+            else:
+                input_box.send_keys(input_text)
+            try:
+                self.driver.hide_keyboard()
+            except Exception:
+                pass
+            return True
 
     # ---- 长按 ----
 
@@ -965,27 +1061,31 @@ class Operation_method(Base_note_class):
             loc = self._resolve_locator(element_key, require_name=True)
             locator_type, locator_value = loc['by'], loc['value']
             target_name = name or loc['name']
+            step_msg = f"长按「{target_name}」"
         elif by_method is not None and locator is not None:
+            _push_element_ctx('wait_for_press_name', None)
             locator_type, locator_value = by_method, locator
             target_name = name
             if not target_name:
                 raise AssertionError("动态元素必须传入 name 参数")
+            step_msg = f"长按\"{target_name}\""
         else:
             raise AssertionError("必须提供 element_key 或 (by_method, locator, name)")
 
-        elements = self.check_list_timeout(locator_type, locator_value)
-        target = str(target_name).strip()
-        for element in elements:
-            try:
-                actual = (element.text or "").strip()
-            except StaleElementReferenceException:
-                continue
-            if actual == target:
-                logging.debug(f"[DEBUG] 匹配到文本 '{target}' 的元素，执行长按")
-                self._safe_long_press_by_element(element, duration=2)
-                return True
-        logging.error(f"未找到指定 '{target_name}' 元素")
-        return False
+        with allure.step(step_msg):
+            elements = self.check_list_timeout(locator_type, locator_value)
+            target = str(target_name).strip()
+            for element in elements:
+                try:
+                    actual = (element.text or "").strip()
+                except StaleElementReferenceException:
+                    continue
+                if actual == target:
+                    logging.debug(f"[DEBUG] 匹配到文本 '{target}' 的元素，执行长按")
+                    self._safe_long_press_by_element(element, duration=2)
+                    return True
+            logging.error(f"未找到指定 '{target_name}' 元素")
+            return False
 
     # ---- 获取元素文本 ----
 
@@ -998,15 +1098,19 @@ class Operation_method(Base_note_class):
         if element_key is not None:
             loc = self._resolve_locator(element_key)
             locator_type, locator_value = loc['by'], loc['value']
+            display = loc.get('operation') or loc.get('name') or str(locator_value)
+            step_msg = f"获取文本「{display}」"
         elif by_method is not None and locator is not None:
             locator_type, locator_value = by_method, locator
+            step_msg = f"获取文本({locator_type}, {locator_value})"
         else:
             raise AssertionError("必须提供 element_key 或 (by_method, locator)")
 
-        elements = self.check_display_timeout(locator_type, locator_value)
-        if elements:
-            logging.debug(f"[DEBUG] 获取元素文本（{locator_type}：{locator_value}），文本为 {elements.text}")
-        return elements.text if elements else None
+        with allure.step(step_msg):
+            elements = self.check_display_timeout(locator_type, locator_value)
+            if elements:
+                logging.debug(f"[DEBUG] 获取元素文本（{locator_type}：{locator_value}），文本为 {elements.text}")
+            return elements.text if elements else None
 
     def obtain_element_list_text(self, by_method=None, locator=None, *, element_key=None):
         """
@@ -1017,20 +1121,24 @@ class Operation_method(Base_note_class):
         if element_key is not None:
             loc = self._resolve_locator(element_key)
             locator_type, locator_value = loc['by'], loc['value']
+            display = loc.get('operation') or loc.get('name') or str(locator_value)
+            step_msg = f"获取文本列表「{display}」"
         elif by_method is not None and locator is not None:
             locator_type, locator_value = by_method, locator
+            step_msg = f"获取文本列表({locator_type}, {locator_value})"
         else:
             raise AssertionError("必须提供 element_key 或 (by_method, locator)")
 
-        element_list = []
-        elements = self.check_list_timeout(locator_type, locator_value)
-        if elements:
-            for element in elements:
-                text = element.text
-                if text:
-                    element_list.append(text)
-            logging.debug(f"[DEBUG] 提取非空文本，共 {len(element_list)} 个")
-        return element_list
+        with allure.step(step_msg):
+            element_list = []
+            elements = self.check_list_timeout(locator_type, locator_value)
+            if elements:
+                for element in elements:
+                    text = element.text
+                    if text:
+                        element_list.append(text)
+                logging.debug(f"[DEBUG] 提取非空文本，共 {len(element_list)} 个")
+            return element_list
 
     # 向后兼容别名
     def obtain_element_list_test(self, by_method=None, locator=None):
@@ -1049,31 +1157,34 @@ class Operation_method(Base_note_class):
             loc = self._resolve_locator(element_key, require_name=True)
             locator_type, locator_value = loc['by'], loc['value']
             target_name = name or loc['name']
+            step_msg = f"弹窗点击「{target_name}」"
         elif by_method is not None and locator is not None:
             locator_type, locator_value = by_method, locator
             target_name = name
             if not target_name:
                 raise AssertionError("动态元素必须传入 name 参数")
+            step_msg = f"弹窗点击\"{target_name}\""
         else:
             raise AssertionError("必须提供 element_key 或 (by_method, locator, name)")
 
-        try:
-            popup = self.check_display_timeout(locator_type, locator_value)
-            if popup.is_displayed():
-                elements = self.check_list_timeout(locator_type, locator_value)
-                for element in elements:
-                    if element.text == target_name:
-                        logging.debug(f"[DEBUG] 匹配到弹窗内文本 '{target_name}' 的元素，执行点击")
-                        self.xpath_check_timeout(target_name)
-                        element.click()
-                        return True
-            return False
-        except TimeoutException:
-            logging.error(f"弹窗未显示")
-            return False
-        except Exception as e:
-            logging.error(f"获取异常{e}")
-            return False
+        with allure.step(step_msg):
+            try:
+                popup = self.check_display_timeout(locator_type, locator_value)
+                if popup.is_displayed():
+                    elements = self.check_list_timeout(locator_type, locator_value)
+                    for element in elements:
+                        if element.text == target_name:
+                            logging.debug(f"[DEBUG] 匹配到弹窗内文本 '{target_name}' 的元素，执行点击")
+                            self.xpath_check_timeout(target_name)
+                            element.click()
+                            return True
+                return False
+            except TimeoutException:
+                logging.error(f"弹窗未显示")
+                return False
+            except Exception as e:
+                logging.error(f"获取异常{e}")
+                return False
 
     # ---- 滑动 ----
 
@@ -1081,14 +1192,15 @@ class Operation_method(Base_note_class):
         """
         按**屏幕比例**滑动（起点→终点）。
         """
-        screen_size = self.driver.get_window_size()
-        start_x = int(screen_size['width'] * start_screen_width)
-        start_y = int(screen_size['height'] * start_screen_height)
-        end_x = int(screen_size['width'] * end_screen_width)
-        end_y = int(screen_size['height'] * end_screen_height)
-        self.driver.swipe(start_x, start_y, end_x, end_y, duration=100)
-        logging.debug(f"[DEBUG] 执行屏幕滑动：起点({start_x},{start_y}) → 终点({end_x},{end_y})")
-        return True
+        with allure.step(f"滑动({start_screen_width:.2f},{start_screen_height:.2f})→({end_screen_width:.2f},{end_screen_height:.2f})"):
+            screen_size = self.driver.get_window_size()
+            start_x = int(screen_size['width'] * start_screen_width)
+            start_y = int(screen_size['height'] * start_screen_height)
+            end_x = int(screen_size['width'] * end_screen_width)
+            end_y = int(screen_size['height'] * end_screen_height)
+            self.driver.swipe(start_x, start_y, end_x, end_y, duration=100)
+            logging.debug(f"[DEBUG] 执行屏幕滑动：起点({start_x},{start_y}) → 终点({end_x},{end_y})")
+            return True
 
     # ---- 等待弹窗消失 ----
 
@@ -1101,18 +1213,23 @@ class Operation_method(Base_note_class):
         if element_key is not None:
             loc = self._resolve_locator(element_key)
             by_method, locator = loc['by'], loc['value']
+            display = loc.get('operation') or loc.get('name') or str(locator)
+            step_msg = f"等待弹窗消失({timeout}s)「{display}」"
         elif by_method is None or locator is None:
             raise AssertionError("必须提供 element_key 或 (by_method, locator)")
+        else:
+            step_msg = f"等待弹窗消失({timeout}s) ({by_method}, {locator})"
 
-        try:
-            WebDriverWait(self.driver, timeout).until_not(
-                EC.presence_of_element_located((by_method, locator))
-            )
-            logging.debug(f"[DEBUG] 弹窗（{by_method}：{locator}）已消失")
-            return True
-        except TimeoutException:
-            logging.error(f" {prompt} , {timeout} 秒后超时")
-            return False
+        with allure.step(step_msg):
+            try:
+                WebDriverWait(self.driver, timeout).until_not(
+                    EC.presence_of_element_located((by_method, locator))
+                )
+                logging.debug(f"[DEBUG] 弹窗（{by_method}：{locator}）已消失")
+                return True
+            except TimeoutException:
+                logging.error(f" {prompt} , {timeout} 秒后超时")
+                return False
 
     # ---- 按坐标点击 ----
 
@@ -1131,14 +1248,18 @@ class Operation_method(Base_note_class):
             screen_size = self.driver.get_window_size()
             actual_x = int(screen_size['width'] * x_ratio)
             actual_y = int(screen_size['height'] * y_ratio)
+            display = info.get('operation') or info.get('name') or element_key
+            step_msg = f"坐标点击「{display}」"
         elif start_screen_width is not None and start_screen_height is not None:
             actual_x, actual_y = start_screen_width, start_screen_height
+            step_msg = f"坐标点击({actual_x}, {actual_y})"
         else:
             raise AssertionError("必须提供 (start_screen_width, start_screen_height) 或 element_key")
 
-        action = TouchAction(self.driver)
-        action.press(x=actual_x, y=actual_y).release().perform()
-        return True
+        with allure.step(step_msg):
+            action = TouchAction(self.driver)
+            action.press(x=actual_x, y=actual_y).release().perform()
+            return True
 
     # ---- 带耗时日志的导入等待 ----
 
@@ -1150,23 +1271,26 @@ class Operation_method(Base_note_class):
         """
         if element_key is not None:
             self.xpath_text_click(element_key=element_key)
+            step_msg = f"耗时等待「{element_key}」({time_out}s)"
         elif name_ok is not None:
             self.xpath_text_click(name_ok)
+            step_msg = f"耗时等待\"{name_ok}\"({time_out}s)"
         else:
             raise AssertionError("必须提供 name_ok 或 element_key")
 
-        while True:
-            try:
-                start = time.time()
-                WebDriverWait(self.driver, time_out, poll_frequency=0.1).until(
-                    EC.visibility_of_element_located((By.XPATH, f'//*[@text="模板"]'))
-                )
-                end = time.time()
-                logging.info(f"{prompt}{(end - start):.2f} 秒")
-                return True
-            except TimeoutException as e:
-                logging.error(f"导入{prompt}文件，{time_out}秒后导入超时{e}")
-                return False
-            except Exception as e:
-                logging.error(f"{prompt}其他异常{e}")
-                return False
+        with allure.step(step_msg):
+            while True:
+                try:
+                    start = time.time()
+                    WebDriverWait(self.driver, time_out, poll_frequency=0.1).until(
+                        EC.visibility_of_element_located((By.XPATH, f'//*[@text="模板"]'))
+                    )
+                    end = time.time()
+                    logging.info(f"{prompt}{(end - start):.2f} 秒")
+                    return True
+                except TimeoutException as e:
+                    logging.error(f"导入{prompt}文件，{time_out}秒后导入超时{e}")
+                    return False
+                except Exception as e:
+                    logging.error(f"{prompt}其他异常{e}")
+                    return False

@@ -1,8 +1,7 @@
 from Note_Automation.config import driver
-from Note_Automation.Devices_list.Device_basic_information import Device_basic_information
 from selenium.webdriver.common.by import By
 from Note_Automation.Note_class.Note_class import Operation_method
-from Note_Automation.Test_local_notes.Public_method import Public_method
+from Note_Automation.Test_local_notes.Public_method import Public_method, device_region
 from Note_Automation.conftest import note_mark_china
 import pytest
 import logging
@@ -10,14 +9,6 @@ import allure
 import re
 
 
-
-#获取设备基础信息
-devices = Device_basic_information()
-try:
-    device_info = devices.get_device_info()
-except RuntimeError:
-    device_info = None
-device_region = device_info.get('device_region') if device_info else None
 @allure.feature("笔记批量管理测试类")
 @pytest.mark.usefixtures("note_test_initial")
 class Test_batch_management:
@@ -35,7 +26,7 @@ class Test_batch_management:
 
         driver.press_keycode(3)
 
-        self.method.xpath_text_click("笔记")
+        self.public.enter_note_app()
 
         note_page = self.note_page(file_name[0])
 
@@ -96,7 +87,7 @@ class Test_batch_management:
 
         self.merge_notes(file_name[0], file_name[1], "合并笔记-2",toast)
 
-        self.method.xpath_text_click("取消")
+        self.method.xpath_text_click(element_key="通用操作.取消按钮")
 
         self.method.wait_for_press_name(By.ID, "com.onyx:id/title","合并笔记-2")
 
@@ -110,7 +101,7 @@ class Test_batch_management:
 
             if match_page != page:
 
-                logging.error(f"合并笔记后页数不对预计{page}页，实际{merge_note.group()}页")
+                pytest.fail(f"合并笔记后页数不对预计{page}页，实际{merge_note.group()}页")
 
     @note_mark_china("批量管理-导出笔记")
     def test_92_note(self,note_test_initial):
@@ -120,7 +111,7 @@ class Test_batch_management:
 
         driver.press_keycode(3)
 
-        self.method.xpath_text_click("笔记")
+        self.public.enter_note_app()
 
         note_page = self.note_page(file_name[0])
 
@@ -165,13 +156,13 @@ class Test_batch_management:
         # 单个笔记文件导出
         # self.public.more_menus("批量管理")
 
-        self.method.xpath_text_click("笔记-1")
+        self.method.xpath_text_click(element_key="笔记首页.打开手写笔记")
 
-        self.method.xpath_text_click("导出")
+        self.method.xpath_text_click(element_key="通用操作.导出按钮")
 
-        self.method.xpath_text_click("位图PDF")
+        self.method.xpath_text_click(element_key="通用操作.不可编辑PDF")
 
-        self.method.xpath_text_click("导出")
+        self.method.xpath_text_click(element_key="通用操作.导出按钮")
 
     @note_mark_china("批量管理-同步笔记")
     def test_93_note(self):
@@ -217,31 +208,25 @@ class Test_batch_management:
 
     def create_all_note(self):
 
-        self.method.xpath_text_click("笔记")
+        self.public.enter_note_app()
 
         # 无笔记未登记 点击创建笔记
-        self.method.xpath_text_click("创建笔记")
+        self.method.xpath_text_click(element_key="笔记首页.无笔记状态创建按钮")
 
         # 创建手写笔记
         self.public.create_handwritten_notes()
 
         # 有笔记状态点击创建
-        self.method.by_element_click(By.ID, "com.onyx:id/create_icon")
+        self.method.by_element_click(element_key="通用操作.创建按钮")
 
         # 创建文本笔记
         self.public.create_text_notes()
 
-        # 创建会议笔记
-        if device_region == "国内":
-            # 有笔记状态点击创建
-            self.method.by_element_click(By.ID, "com.onyx:id/create_icon")
-
-            # 创建一个会议笔记
-            self.public.create_meeting_notes()
+        self.public.create_meeting_if_domestic()
 
     def create_all_notes(self):
 
-        self.method.xpath_text_click("笔记")
+        self.public.enter_note_app()
 
         # 无笔记状态创建笔记
         self.public.create_notes()
@@ -249,9 +234,9 @@ class Test_batch_management:
         # 有笔记状态创建笔记
         self.public.create_notes("have_notes")
 
-        self.method.by_element_click(By.ID, "com.onyx:id/create_icon")
+        self.method.by_element_click(element_key="通用操作.创建按钮")
 
-        self.method.xpath_text_click("从本地文件")
+        self.method.xpath_text_click(element_key="笔记首页.从本地文件导入")
 
         self.public.import_file_bootstrap("选择文件即可创建笔记", "知道了")
 
@@ -267,7 +252,7 @@ class Test_batch_management:
 
         the_number_of_pages = re.search(r'\d+', name)
 
-        self.method.by_element_click(By.ID,"com.onyx:id/btn_close")
+        self.method.by_element_click(element_key="通用操作.关闭按钮")
 
         return the_number_of_pages
 
@@ -278,9 +263,9 @@ class Test_batch_management:
 
         self.method.xpath_text_click(function)
         self.method.xpath_text_click(toast)
-        self.method.xpath_text_click("保留模板",None)
-        self.method.xpath_text_click("取消",None)
-        self.method.xpath_text_click("确定")
+        self.method.xpath_text_click(element_key="通用操作.保留模板选项", should_click=None)
+        self.method.xpath_text_click(element_key="通用操作.取消按钮", should_click=None)
+        self.method.xpath_text_click(element_key="通用操作.确定按钮")
 
         self.method.xpath_text_click(merge_note,None)
 
@@ -305,7 +290,7 @@ class Test_batch_management:
 
         self.method.xpath_text_click(notes_name)
 
-        self.method.xpath_text_click("合并")
+        self.method.xpath_text_click(element_key="笔记首页.批量管理-合并")
 
         self.method.wait_check_toast(toast)
 

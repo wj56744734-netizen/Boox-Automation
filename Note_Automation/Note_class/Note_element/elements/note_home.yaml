@@ -314,10 +314,19 @@ elements:
     locator: [xpath, 启用笔记-导出功能]
     operation: 登录网盘后开启笔记导出开关
     desc: 登录网盘后开启笔记导出开关
-  笔记首页.测试文件笔记自动化测试文件:
-    locator: [xpath, 笔记自动化测试文件]
-    operation: 根目录下进入笔记自动化测试文件
-    desc: 根目录下进入笔记自动化测试文件
+#  笔记首页.测试文件笔记自动化测试文件:
+#    locator: [xpath, 笔记自动化测试文件]
+#    operation: 根目录下进入笔记自动化测试文件
+#    desc: 根目录下进入笔记自动化测试文件
+#  笔记首页.固件迭代测试项（笔记导出）:
+#    locator: [ xpath, 固件迭代测试项（笔记导出） ]
+#    operation: 进入测试文件
+#    desc: 进入测试文件
+  笔记首页.手写线条.note:
+    locator: [ xpath, 手写线条.note ]
+    operation: 进入测试文件，指定手写线条.note
+    desc: 进入测试文件，指定手写线条.note
+
   笔记首页.测试文件用例测试，从本地文件导入:
     locator: [xpath, 用例测试，从本地文件导入]
     operation: 根目录下进入笔记自动化测试文件
