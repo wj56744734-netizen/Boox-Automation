@@ -41,15 +41,16 @@ Test_local_notes/Public_method.py (业务流公共方法)
     ↓
 Test_local_notes/test_excel_runner.py (Excel 驱动测试入口)
     ↓
-excel_framework/ (parser → matcher → conditions → executor → reporter)
+excel_framework/ (parser → matcher → conditions → reporter)
 ```
 
 **子包职责：**
 
 | 目录 | 职责 |
 |---|---|
-| `excel_framework/` | Excel 驱动测试框架。`parser.py`=步骤解析；`matcher.py`=【】标签→元素匹配；`conditions.py`=前置条件检查；`executor.py`=用例执行；`reporter.py`=结果统计 |
-| `Note_class/` | UI 操作引擎。`Note_class.py`=定位/点击/滑动/输入封装；`element_catalog.py`=locator 中文描述；`Logcat.py`=线程安全 Android 日志捕获 |
+| `excel_framework/` | Excel 驱动测试框架。`parser.py`=步骤解析；`matcher.py`=【】标签→元素匹配；`conditions.py`=前置条件检查；`executor.py`=用例执行；`reporter.py`=结果统计；`run.py`=独立运行入口；`elements.xlsx`=元素定义库；`test_cases.xlsx`=测试用例集 |
+| `excel_runner/` | Excel runner 包标记，`test_excel_runner.py` 的归属包 |
+| `Note_class/` | UI 操作引擎。`Note_class.py`=定位/点击/滑动/输入封装；`element_catalog.py`=locator 中文描述；`Logcat.py`=线程安全 Android 日志捕获；`Note_element/element_loader.py`=Excel 元素加载器（单例） |
 | `Devices_list/` | ADB 设备信息采集（版本/指纹/分辨率/内存）+ 按平台拆分的设备型号 YAML 库 |
 | `framework/` | `health.py`=Appium/ADB 健康检查；`paths.py`=集中路径常量；`cleanup.py`=产物轮换清理 |
 | `Test_local_notes/` | 测试套件。`test_excel_runner.py`=主入口；`Public_method.py`=业务流公共方法；`run_test_report.py`=Allure 报告入口；`Test_performance_verify/`=性能测试 |
