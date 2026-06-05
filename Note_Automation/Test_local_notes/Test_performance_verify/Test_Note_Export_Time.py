@@ -6,6 +6,9 @@ from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from Note_Automation.Note_class.Logcat import Logcat
 from Note_Automation.config import driver
+from Note_Automation.Devices_list.Device_basic_information import (
+    TEST_FILES_DISPLAY_ROOT, TEST_FILES_DIR_NOTE_EXPORT,
+)
 from Note_Automation.Note_class.Note_class import Operation_method
 from Note_Automation.Test_local_notes.Public_method import Public_method, device_region
 
@@ -332,18 +335,18 @@ class Test_Note_Export_Time:
 
     def test_note_export_time(self, note_test_initial):
 
-        # self.public.enter_note_app()
-        # self.method.xpath_text_click(element_key="笔记首页.无笔记状态创建按钮")
-        # self.method.xpath_text_click(element_key="笔记首页.从本地文件导入")
-        # self.public.import_file_bootstrap("笔记首页.从本地文件导入引导", "笔记首页.弹窗通用知道了")
-        # self.public.import_file("笔记自动化测试文件", "固件迭代测试项（笔记导出）")
-        #
-        # # 返回按钮
-        # self.method.xpath_parent_click(xpath='//android.widget.LinearLayout[@resource-id="com.onyx.android.note:id/layout_back"]/android.widget.ImageView')
+        self.public.enter_note_app()
+        self.method.xpath_text_click(element_key="笔记首页.无笔记状态创建按钮")
+        self.method.xpath_text_click(element_key="笔记首页.从本地文件导入")
+        self.public.import_file_bootstrap("选择文件即可创建笔记", "知道了")
+        self.public.import_file("笔记自动化测试文件", "固件迭代测试项（笔记导出）")
+
+        # 返回按钮
+        self.method.xpath_parent_click(xpath='//android.widget.LinearLayout[@resource-id="com.onyx.android.note:id/layout_back"]/android.widget.ImageView')
 
         # 以下注释部分可根据需要开启
         driver.press_keycode(3)
-        self.public.restore_notes(file_route_name="笔记自动化测试文件", file_route_name2="固件迭代测试项（笔记导出）",file_route_name3="手写线条.note")
+        self.public.restore_notes(file_route_name=TEST_FILES_DISPLAY_ROOT, file_route_name2=TEST_FILES_DIR_NOTE_EXPORT, file_route_name3="手写线条.note")
         time.sleep(3)
         self.public.enter_note_app()
         self.method.xpath_text_click(name="手写线条(1)", should_click=False)

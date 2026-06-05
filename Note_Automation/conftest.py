@@ -172,10 +172,27 @@ def pytest_sessionstart(session):
     if not _likely_needs_device(session):
         return
     try:
-        Device_basic_information().get_connected_device_ids()
+        devices = Device_basic_information()
+        device_id = devices.get_connected_device_ids()
+
+        logging.info("=" * 60)
+        logging.info("  笔记自动化测试")
+        logging.info("=" * 60)
+
+        devices.check_device_language(device_id)
+        devices.get_wifi(device_id)
+
+        # 验证设备型号是否在映射表中注册
+        device_info = devices.get_device_info()
+        if device_info is None:
+            raise RuntimeError("设备型号未注册，请检查 Devices_list/Device_basic_information.py 中的 device_list 映射表")
+
+        devices.check_test_files(device_id)
+
+        logging.info("-" * 60)
     except RuntimeError as e:
         pytest.exit(
-            f"未检测到已连接设备（{e}），请连接设备后再运行测试",
+            f"前置检查失败 — {e}",
             returncode=1
         )
 

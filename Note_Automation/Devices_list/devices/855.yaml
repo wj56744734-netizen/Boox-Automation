@@ -1,0 +1,36 @@
+# 855 平台
+
+NoteMax:
+  platform: '855'
+  region: 海外
+  type: 平板
+  size: '13.3'
+  colour: 黑白
+
+T13C:
+  platform: '855'
+  region: 国内
+  type: 平板
+  size: '13.3'
+  colour: 彩色
+
+Tab10CPro:
+  platform: '855'
+  region: 国内
+  type: 平板
+  size: '10.3'
+  colour: 彩色
+
+TabUltraCPro:
+  platform: '855'
+  region: 海外
+  type: 平板
+  size: '10.3'
+  colour: 彩色
+
+TabXC:
+  platform: '855'
+  region: 海外
+  type: 平板
+  size: '13.3'
+  colour: 彩色

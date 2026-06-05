@@ -5,7 +5,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.common.by import By
 from Note_Automation.Note_class.Note_class import Operation_method
-from Note_Automation.Note_class.Note_element.element_loader import ElementLoader
+from Note_Automation.Note_class.Note_element.element_loader import get_element_loader
 from Note_Automation.Note_class.Logcat import Logcat
 from Note_Automation.config import driver
 from Note_Automation.Devices_list.Device_basic_information import Device_basic_information
@@ -47,7 +47,7 @@ class Public_method:
         self._stop_event = Event()
         self._lock = Lock()
         self.driver = driver
-        self.element_loader = ElementLoader()
+        self.element_loader = get_element_loader()
         self.logcat = Logcat()
         self.method = Operation_method(self.driver)
 
@@ -198,7 +198,20 @@ class Public_method:
 
     def enter_note_app(self):
         """进入笔记应用首页"""
-        self.method.xpath_text_click(element_key="笔记首页.进入笔记首页")
+
+        devices_info = devices.get_device_info()
+        if device_info:
+            devices_reader = devices_info.get('devices_reader')
+            if devices_reader == "阅读器":
+                # if device_size == "6":
+                #     self.method.xpath_parent_click(
+                #         xpath='(//android.widget.ImageView[@resource-id="com.onyx:id/function_icon"])[3]')
+                # else:
+                self.method.xpath_parent_click(
+                        xpath='(//android.widget.ImageView[@resource-id="com.onyx:id/function_icon"])[3]')
+            else:
+                self.method.xpath_parent_click(
+                    xpath='(//android.widget.ImageView[@resource-id="com.onyx:id/title_image"])[2]')
 
     def create_file(self):
         """创建文件夹（调用前需先通过 more_menus 打开新建文件夹菜单）"""

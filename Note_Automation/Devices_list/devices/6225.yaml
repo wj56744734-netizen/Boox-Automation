@@ -1,0 +1,64 @@
+# 6225 平台
+
+Go103:
+  platform: '6225'
+  region: 海外
+  type: 阅读器
+  size: '10.3'
+  colour: 黑白
+
+NoteAir3:
+  platform: '6225'
+  region: 海外
+  type: 阅读器
+  size: '10.3'
+  colour: 黑白
+
+NoteAir3C:
+  platform: '6225'
+  region: 海外
+  type: 阅读器
+  size: '10.3'
+  colour: 彩色
+
+NoteX3:
+  platform: '6225'
+  region: 国内
+  type: 阅读器
+  size: '10.3'
+  colour: 黑白
+
+NoteX3Pro:
+  platform: '6225'
+  region: 国内
+  type: 阅读器
+  size: '10.3'
+  colour: 黑白
+
+NoteX3S:
+  platform: '6225'
+  region: 国内
+  type: 阅读器
+  size: '10.3'
+  colour: 黑白
+
+T10C:
+  platform: '6225'
+  region: 国内
+  type: 平板
+  size: '10.3'
+  colour: 彩色
+
+T10CPlus:
+  platform: '6225'
+  region: 国内
+  type: 平板
+  size: '10.3'
+  colour: 彩色
+
+GoColor7:
+  platform: '6225'
+  region: 海外
+  type: 阅读器
+  size: '7'
+  colour: 彩色

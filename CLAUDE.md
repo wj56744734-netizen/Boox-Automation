@@ -80,3 +80,59 @@ Test_local_notes/test_*.py (测试用例，依赖 Public_method + conftest fixtu
 - 新增业务流方法加在 `Public_method.py`，只通过 `Operation_method` 暴露的 API 操作 UI
 - 新增/修改 locator 时同步在 `element_catalog.py` 补一行中文描述，方便失败排错
 - 产物路径使用 `framework.paths` 提供的工厂方法（`safe_screenshot_path` / `tmp_path` / `new_allure_results_dir` 等），不要硬编码路径
+
+## 近期变更（2026-05-29 / 2026-05-30）
+
+### allure.step 自动上报
+
+19 个 `Operation_method` 公开方法统一在内部生成 `allure.step`：
+- element_key 模式显示 `「{operation}」`（YAML 中的中文描述）
+- raw locator 模式退化为 `点击(By.ID, "xxx")`
+- 测试用例不需要再手动 `with allure.step(...)` 包裹
+
+### 前置检查序列
+
+`pytest_sessionstart` 按顺序检查，任意失败立即 `pytest.exit()`：
+
+```
+设备连接 → 语言(zh-CN) → WiFi → 设备型号注册 → 测试文件目录
+```
+
+- `check_device_language(device_id)`: `adb shell getprop persist.sys.locale`，非 `zh` 则中断
+- `check_test_files(device_id)`: `adb shell ls /sdcard/笔记自动化测试文件/`，缺目录逐行列出完整路径
+- `match_device_info` 日志级别从 `info` 改为 `error`
+
+### 日志格式简化
+
+- 格式：`%(asctime)s  %(levelname)-5s  %(message)s`（去掉 funcName、中括号、竖线分隔符）
+- 设备信息从 15 行压缩到 4 行（型号/分辨率/平台/系统各一行）
+- WiFi/内存/存储各压缩到 1 行
+- `--no-header` 抑制 pytest 元数据块
+- `--collect-only` 子进程加 `-o log_cli=false` 静默
+
+### 测试文件路径常量
+
+`Device_basic_information.py` 模块级常量：
+
+| 常量 | 示例值 | 用途 |
+|---|---|---|
+| `TEST_FILES_ROOT` | `/sdcard/笔记自动化测试文件` | ADB 文件系统操作 |
+| `TEST_FILES_DISPLAY_ROOT` | `笔记自动化测试文件` | UI 元素文本匹配（xpath_text_click 等） |
+| `TEST_FILES_DIR_*` | `从本地文件` 等 6 个 | 子目录名 |
+| `TEST_FILES_ALL_DIRS` | list | `check_test_files` 遍历用 |
+
+**注意**：UI 方法（`import_file` / `get_file` / `restore_notes` 等）用 `TEST_FILES_DISPLAY_ROOT`，不用 `TEST_FILES_ROOT`。后者以 `/` 开头会被 `_is_xpath_expression` 误判为 XPath 表达式。
+
+### run_test_report.py 优化
+
+- `get_connected_device_ids(silent=True)` 静默获取设备 ID，避免主进程重复打印设备日志
+- `run_pytest_and_get_output` 返回 `(output, return_code)` 元组
+- 前置检查失败时不生成 Allure 报告
+- `__main__` 中轻量获取设备区域，不触发 `get_device_info()` 完整日志
+
+### 协作规则
+
+- **先给方案再动手**：任何代码修改先出方案等确认，用户明确同意后再执行
+- **不确定必须确认，禁止盲写**：对需求场景、使用方式、设计选择有任何不确定时，必须先停下来和用户确认，不能自行假设后直接写代码。技术上可行不等于场景上合理。
+- **改完必须验证**：每次代码修改后跑 `python -c "import ast; ast.parse(...)"` 语法检查，确认无报错再答复。不要改完不验证就把错误代码交给用户
+- **截图无法查看时用数值分析**：大尺寸 RGBA PNG Read 工具可能无法渲染，用 `python3 -c "from PIL import Image; import numpy as np; ..."` 分析像素值来判断画面内容

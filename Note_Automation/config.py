@@ -3,18 +3,6 @@ import subprocess
 import sys
 import os
 
-# 统一日志格式：时间 | 级别 | 函数名 | 文件:行号 | 消息
-LOG_FORMAT = '%(asctime)s [%(levelname)s] | %(funcName)s | %(filename)s:%(lineno)d | %(message)s'
-LOG_DATE_FORMAT = '%Y-%m-%d %H:%M:%S'
-
-# 配置 logging（与 conftest.py 保持一致）
-logging.basicConfig(
-    level=logging.INFO,
-    format=LOG_FORMAT,
-    datefmt=LOG_DATE_FORMAT,
-    stream=sys.stdout
-)
-
 from appium import webdriver
 from Note_Automation.Devices_list.Device_basic_information import Device_basic_information
 from Note_Automation.framework.health import ensure_appium_server

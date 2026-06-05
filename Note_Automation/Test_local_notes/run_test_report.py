@@ -2,15 +2,26 @@ from Note_Automation.config import driver
 from Note_Automation.Devices_list.Device_basic_information import Device_basic_information
 from Note_Automation.framework.paths import new_allure_results_dir, new_allure_html_dir
 from datetime import datetime
+from pathlib import Path
 import subprocess
 import re
 import os
 
 
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+
 current_time = datetime.now().strftime("%Y%m%d%H%M%S")
 
 results_dir = str(new_allure_results_dir(current_time))
 report_dir = str(new_allure_html_dir(current_time))
+
+
+def _short(p: str) -> str:
+    """将绝对路径转为相对于仓库根的短路径，失败则返回原路径。"""
+    try:
+        return str(Path(p).resolve().relative_to(_REPO_ROOT))
+    except ValueError:
+        return p
 
 
 def extract_test_stats(pytest_output):
@@ -62,13 +73,11 @@ def run_pytest_and_get_output(args):
     if return_code != 0:
         print(f"pytest 执行失败，返回码: {return_code}")
 
-    return full_output
+    return full_output, return_code
 
 def collect_tests_and_get_stats(args):
     """只运行 pytest 的收集阶段并获取测试统计信息"""
-    collect_args = args + ["--collect-only"]
-
-    print(f"正在收集测试用例: pytest {' '.join(collect_args)}")
+    collect_args = args + ["--collect-only", "-q", "--no-header", "-o", "log_cli=false"]
 
     process = subprocess.Popen(
         ['pytest'] + collect_args,
@@ -101,9 +110,8 @@ def note_test_report(platform,test_scope="full"):
             marker_expr = f"{platform} and full_amount"
 
         pytest_args = [
-            "-s", "-v",
+            "-s", "-v", "--no-header",
             "-m", marker_expr,
-            "--reruns", "2",
             f"--alluredir={results_dir}"
         ]
 
@@ -111,27 +119,20 @@ def note_test_report(platform,test_scope="full"):
         stats = extract_test_stats(collect_output)
 
 
-        print("\n========== 测试用例统计信息 ==========")
-
-        print(f"执行 {test_scope} 用例测试")
-        print(f"测试平台 {platform} 用例测试")
-
-        print(f"收集的项目总数: {stats['collected']}")
-        print(f"被筛选掉的项目数: {stats['deselected']}")
-        print(f"最终选中的项目数: {stats['selected']}")
-        print("=====================================\n")
+        print(f"\n  测试用例: 共 {stats['collected']} 个 / 选中 {stats['selected']} 个 / 排除 {stats['deselected']} 个\n")
 
 
         print("开始执行测试...\n")
-        pytest_output = run_pytest_and_get_output(pytest_args)
+        pytest_output, return_code = run_pytest_and_get_output(pytest_args)
 
-        # 生成 Allure 报告
-        print(f"生成 Allure 报告到目录: {report_dir}")
-        os.system(f"allure generate {results_dir} -o {report_dir} -c")
+        # 生成 Allure 报告（无论测试成败都生成，失败时报告更关键）
+        print(f"\npytest 返回码: {return_code}")
+        print(f"生成 Allure 报告到目录: {_short(report_dir)}")
+        subprocess.run(f"allure generate {results_dir} -o {report_dir} -c", shell=True)
 
         # 打开 Allure 报告
-        print(f"打开 Allure 报告: {report_dir}")
-        os.system(f"allure open {report_dir}")
+        print(f"打开 Allure 报告: {_short(report_dir)}")
+        subprocess.run(f"allure open {report_dir}", shell=True)
 
         # 关闭驱动
         driver.quit()
@@ -139,22 +140,26 @@ def note_test_report(platform,test_scope="full"):
         print(f"执行过程中出现异常: {e}")
 
 if __name__ == '__main__':
-    print("开始执行测试脚本")
     devices = Device_basic_information()
+    device_id = devices.get_connected_device_ids(silent=True)
 
-    device_info = devices.get_device_info()
-
-    device_region = device_info.get('device_region')
-
-    RUN_INCREMENTAL = True  # 设置为True则执行增量测试
-    test_scope = "incremental" if RUN_INCREMENTAL else "full"
-
-    if device_region == "国内":
-
-        note_test_report("china", test_scope)
-
+    # 仅获取设备区域，不触发完整设备信息日志（sessionstart 会统一打印）
+    fingerprint = devices.get_device_fingerprint(device_id)
+    if fingerprint:
+        devices_name, _, _, _, _ = devices.parse_fingerprint(fingerprint)
+        device_match = devices.match_device_info(devices_name)
+        device_region = device_match.get('device_region') if device_match else '国内'
     else:
+        print("前置检查失败 — 无法获取设备指纹信息")
+        exit(1)
 
-        note_test_report("abroad", test_scope)
+    if device_match is None:
+        print("前置检查失败 — 设备型号未注册，请检查 device_list 映射表")
+        exit(1)
+
+    RUN_INCREMENTAL = True
+    test_scope = "incremental" if RUN_INCREMENTAL else "full"
+    platform = "china" if device_region == "国内" else "abroad"
+    note_test_report(platform, test_scope)
 
     print("测试脚本执行完毕")

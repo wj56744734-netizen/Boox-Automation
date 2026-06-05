@@ -9,9 +9,27 @@ _CACHED_DEVICE_ID = None
 _Fingerprint_information = None
 _Version_Information = None
 
+# ===== 设备测试文件路径常量 =====
+TEST_FILES_ROOT = "/sdcard/笔记自动化测试文件"
+TEST_FILES_DISPLAY_ROOT = "笔记自动化测试文件"
+TEST_FILES_DIR_LOCAL_IMPORT = "从本地文件"
+TEST_FILES_DIR_NOTE_EXPORT = "固件迭代测试项（笔记导出）"
+TEST_FILES_DIR_NOTE_RENDER = "固件迭代测试项（笔记渲染）"
+TEST_FILES_DIR_TEST_NOTES  = "测试笔记"
+TEST_FILES_DIR_LOCAL_FILE  = "用例测试，从本地文件导入"
+TEST_FILES_DIR_NOTE_SEARCH = "笔记搜索用例文件"
+TEST_FILES_ALL_DIRS = [
+    TEST_FILES_DIR_LOCAL_IMPORT,
+    TEST_FILES_DIR_NOTE_EXPORT,
+    TEST_FILES_DIR_NOTE_RENDER,
+    TEST_FILES_DIR_TEST_NOTES,
+    TEST_FILES_DIR_LOCAL_FILE,
+    TEST_FILES_DIR_NOTE_SEARCH,
+]
+
 class Device_basic_information:
 
-    def get_connected_device_ids(self):
+    def get_connected_device_ids(self, silent=False):
         """获取已连接的设备ID，仅第一次实际执行，后续返回缓存值"""
 
         global _CACHED_DEVICE_ID
@@ -38,7 +56,8 @@ class Device_basic_information:
             if expected_device_id:
                 if expected_device_id in device_ids:
                     _CACHED_DEVICE_ID = expected_device_id
-                    logging.info(f"使用环境变量指定设备ID: {_CACHED_DEVICE_ID}")
+                    if not silent:
+                        logging.info(f"使用环境变量指定设备ID: {_CACHED_DEVICE_ID}")
                     return _CACHED_DEVICE_ID
                 raise RuntimeError(f"环境变量 NOTE_DEVICE_ID={expected_device_id} 未在当前连接设备中")
 
@@ -52,10 +71,12 @@ class Device_basic_information:
                     check=True
                 )
                 model = model_result.stdout.strip()
-                logging.info(f'多设备连接，默认使用设备：{model}（ID: {device_id}）')
+                if not silent:
+                    logging.info(f'多设备连接，默认使用设备：{model}（ID: {device_id}）')
             # 缓存设备ID到模块变量
             _CACHED_DEVICE_ID = device_ids[0]
-            logging.info(f"模块缓存设备ID: {_CACHED_DEVICE_ID}")
+            if not silent:
+                logging.info(f"设备已连接: {_CACHED_DEVICE_ID}")
             return _CACHED_DEVICE_ID
         except RuntimeError:
             raise
@@ -153,12 +174,7 @@ class Device_basic_information:
             link_speed_match = re.search(r'Link speed: (\d+Mbps)', transport_info)
             link_speed = link_speed_match.group(1).strip() if link_speed_match else "未知"
 
-            logging.info("Wi-Fi状态: 已连接")
-            logging.info(f"  SSID: {ssid}")
-            logging.info(f"  IP地址: {ip}")
-            logging.info(f"  信号强度: {rssi} dBm")
-            logging.info(f"  连接速度: {link_speed}")
-
+            quality = "未知"
             if rssi != "未知":
                 rssi_value = int(rssi)
                 if rssi_value >= -50:
@@ -167,7 +183,8 @@ class Device_basic_information:
                     quality = "良好"
                 else:
                     quality = "一般"
-                logging.info(f"Wi-Fi信号质量: {quality}")
+
+            logging.info(f"Wi-Fi: {ssid} | {ip} | {rssi} dBm ({quality}) | {link_speed}")
 
             return {
                 "connected": True,
@@ -177,9 +194,41 @@ class Device_basic_information:
                 "link_speed": link_speed
             }
 
+        except RuntimeError:
+            raise
         except Exception as e:
             logging.error(f"检查Wi-Fi状态时出错: {e}")
             return {"connected": False}
+
+    def check_device_language(self, device_id):
+        """检查设备语言是否为中文，非中文则中断测试"""
+        result = subprocess.run(
+            ['adb', '-s', device_id, 'shell', 'getprop', 'persist.sys.locale'],
+            capture_output=True, text=True
+        )
+        locale = result.stdout.strip()
+        if 'zh' not in locale.lower():
+            raise RuntimeError(
+                f"设备语言非中文（当前: {locale}），请先将设备语言切换为中文后再运行测试"
+            )
+        logging.info(f"语言检查: {locale} ✓")
+        return locale
+
+    def check_test_files(self, device_id):
+        """检查设备上是否存在测试文件目录，缺失则中断测试"""
+        result = subprocess.run(
+            ['adb', '-s', device_id, 'shell', 'ls', TEST_FILES_ROOT],
+            capture_output=True, text=True
+        )
+        actual = set(result.stdout.strip().split('\n')) if result.stdout.strip() else set()
+
+        missing = [d for d in TEST_FILES_ALL_DIRS if d not in actual]
+        if missing:
+            lines = "\n    ".join(f"- {TEST_FILES_ROOT}/{d}" for d in missing)
+            raise RuntimeError(f"设备缺少测试文件目录：\n    {lines}")
+
+        logging.info(f"测试文件检查: {len(TEST_FILES_ALL_DIRS)} 个目录 ✓")
+        return True
 
     def get_device_memory_info(self,device_id):
         """"" 获取设备内存信息 """""
@@ -199,9 +248,7 @@ class Device_basic_information:
         mem_free_mb = round(int(mem_free) / (1024 * 1024), 2) if mem_free != "未知" else "未知"
         mem_available_mb = round(int(mem_available) / (1024 * 1024), 2) if mem_available != "未知" else "未知"
 
-        logging.info(f"  总内存: {mem_total_mb}GB")
-        logging.info(f"  空闲内存: {mem_free_mb}GB")
-        logging.info(f"  可用内存: {mem_available_mb}GB")
+        logging.info(f"  内存: 总 {mem_total_mb}GB / 可用 {mem_available_mb}GB")
 
         return {"total": f"{mem_total_mb} MB", "free": f"{mem_free_mb} MB", "available": f"{mem_available_mb} MB"}
 
@@ -217,9 +264,7 @@ class Device_basic_information:
         if len(output.strip().split('\n')) > 1:
             parts = output.strip().split('\n')[1].split()
             total, used, available, percent = parts[1], parts[2], parts[3], parts[4]
-            logging.info(f"  总容量: {total}B")
-            logging.info(f"  已使用: {used}B ({percent})")
-            logging.info(f"  可用空间: {available}B")
+            logging.info(f"  存储: 总 {total}B / 可用 {available}B ({percent}已用)")
             return {"total": total, "used": used, "available": available, "percent_used": percent}
         logging.error("无法获取存储信息")
         return {"error": "无法获取存储信息"}
@@ -272,17 +317,17 @@ class Device_basic_information:
         if devices_name is None:
             return None
 
-        for name, (platform, region, reader, size, colour) in device_list.items():
-            if name == devices_name:
-                return {
-                    "device_name": name,
-                    "device_platform": platform,
-                    "device_region": region,
-                    "devices_reader": reader,
-                    "device_size": size,
-                    "driver_colour": colour
-                }
-        logging.info(f"设备型号 {devices_name} 未在设备列表中找到")
+        device = device_list.get(devices_name)
+        if device:
+            return {
+                "device_name": devices_name,
+                "device_platform": device.get("platform", ""),
+                "device_region": device.get("region", ""),
+                "devices_reader": device.get("type", ""),
+                "device_size": device.get("size", ""),
+                "driver_colour": device.get("colour", ""),
+            }
+        logging.error(f"设备型号 {devices_name} 未在设备列表中找到")
         return None
 
     def get_device_info(self):
@@ -325,26 +370,22 @@ class Device_basic_information:
         """打印设备基础信息"""
         device_info = self.get_device_info()
         if device_info:
-            logging.info("===== 设备基础信息 =====")
-            logging.info(f"设备型号：{device_info.get('device_name')}")
-            logging.info(f"设备平台：{device_info.get('device_platform')}")
-            logging.info(f"设备区域：{device_info.get('device_region')}")
-            logging.info(f"设备类型：{device_info.get('devices_reader')}")
-            logging.info(f"设备尺寸：{device_info.get('device_size')}寸")
-            logging.info(f"设备显示：{device_info.get('driver_colour')}")
-            logging.info(f"设备分辨率：{device_info.get('filtered_size')}")
-            logging.info(f"版本信息：{device_info.get('version_info')}")
-            logging.info(f"构建类型：{device_info.get('build_type')}")
-            logging.info(f"系统版本信息：{device_info.get('build_date_time')}")
-            logging.info(f"设备ID：{device_info.get('device_id')}")
+            logging.info("-" * 40)
+            logging.info(
+                f"设备: {device_info.get('device_name')} | "
+                f"{device_info.get('device_size')}寸{device_info.get('driver_colour')} | "
+                f"{device_info.get('version_info')} | "
+                f"{device_info.get('device_region')}"
+            )
+            logging.info(
+                f"      分辨率 {device_info.get('filtered_size')} | "
+                f"平台 {device_info.get('device_platform')} | "
+                f"类型 {device_info.get('devices_reader')} | "
+                f"构建 {device_info.get('build_type')}"
+            )
+            logging.info(f"      系统: {device_info.get('build_date_time')}")
 
-            logging.info(" ===== 系统信息 ===== ")
-            time.sleep(3) #部分情况下设备刚唤醒连接WiFi需要时间
-            logging.info(f"【网络状态】")
-            self.get_wifi(device_id)
-
-            # 记录内存和存储信息
-            logging.info(f"【内存信息】")
+            time.sleep(3)
             self.get_device_memory_info(device_id)
-            logging.info(f"【存储信息】")
             self.get_device_storage_info(device_id)
+            logging.info("-" * 40)

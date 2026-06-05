@@ -1,3 +1,7 @@
+from Note_Automation.Devices_list.Device_basic_information import (
+    TEST_FILES_DISPLAY_ROOT, TEST_FILES_DIR_LOCAL_FILE,
+    TEST_FILES_DIR_NOTE_SEARCH,
+)
 from Note_Automation.Note_class.Note_class import Operation_method
 from Note_Automation.Test_local_notes.Public_method import Public_method, device_region
 from Note_Automation.conftest import note_mark_china, note_mark_increment, note_mark_full_amount
@@ -36,7 +40,7 @@ class Test_import_the_file:
         self.public.import_file_bootstrap("选择文件即可创建笔记","知道了")
 
         #进入指定文件路径，并导入此路径下的全部文档
-        self.public.import_file("笔记自动化测试文件","用例测试，从本地文件导入")
+        self.public.import_file(TEST_FILES_DISPLAY_ROOT, TEST_FILES_DIR_LOCAL_FILE)
 
     @note_mark_china("笔记首页搜索指定内容")
     @note_mark_increment("增量")
@@ -49,7 +53,7 @@ class Test_import_the_file:
 
         self.method.by_name_click(element_key="设备相关.存储卷列表")
 
-        self.public.get_file("笔记自动化测试文件","笔记搜索用例文件","笔记-1.note")
+        self.public.get_file(TEST_FILES_DISPLAY_ROOT, TEST_FILES_DIR_NOTE_SEARCH, "笔记-1.note")
 
         # .note导入笔记页面 确认
         self.method.by_name_click(element_key="通用操作.笔记内-导入确认按钮")
@@ -154,7 +158,7 @@ class Test_import_the_file:
         self.public.enter_storage()
 
         # 进入存储页面根目录下，将指定文件复制进入.note文件路径下
-        self.copy_the_file("笔记自动化测试文件","note")
+        self.copy_the_file(TEST_FILES_DISPLAY_ROOT, "note")
 
         self.driver.press_keycode(3)
 
@@ -248,7 +252,7 @@ class Test_import_the_file:
 
         self.method.by_name_click(element_key="通用操作.复制菜单项")
 
-        self.method.by_name_click(By.ID, "com.onyx:id/text_title", "存储/笔记自动化测试文件")
+        self.method.by_name_click(By.ID, "com.onyx:id/text_title", f"存储/{TEST_FILES_DISPLAY_ROOT}")
 
         self.method.by_name_click(element_key="通用操作.粘贴按钮")
 

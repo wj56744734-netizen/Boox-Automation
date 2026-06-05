@@ -21,6 +21,17 @@ from appium.webdriver.common.touch_action import TouchAction
 
 from Note_Automation.Note_class.element_catalog import describe as _describe_locator
 
+# 仓库根目录，用于将绝对路径缩短为相对路径
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+
+
+def _short_path(p: str) -> str:
+    """将绝对路径转为相对于仓库根的短路径，失败则返回原路径。"""
+    try:
+        return str(Path(p).resolve().relative_to(_REPO_ROOT))
+    except ValueError:
+        return p
+
 
 # 仅以下异常类型才参与重试，其它（含 session 级失败）直接抛出
 RETRYABLE_EXCEPTIONS = (
@@ -183,7 +194,7 @@ def retry_and_handle_exceptions(max_retries=3, retry_delay=1):
                     src = args[0].get_element_source(display_key)
                     if src:
                         line_no = args[0].get_element_line(display_key)
-                        tag = f"{src}:{line_no}" if line_no else src
+                        tag = f"{_short_path(src)}:{line_no}" if line_no else _short_path(src)
                         lines.append(f"  ↳ YAML:   {tag}")
                 except Exception:
                     pass
@@ -229,7 +240,7 @@ def retry_and_handle_exceptions(max_retries=3, retry_delay=1):
                 logging.warning(f"截图失败：{screenshot_err}")
 
             if screenshot_ok:
-                lines.append(f"  ↳ 截图: {file_path}")
+                lines.append(f"  ↳ 截图: {_short_path(file_path)}")
 
             msg = "\n".join(lines)
             logging.error(msg)
@@ -241,17 +252,17 @@ def retry_and_handle_exceptions(max_retries=3, retry_delay=1):
 
 # ------------------------------ 基础元素等待类 ------------------------------
 class Base_note_class:
-    def __init__(self, driver, yaml_path=None):
-        """初始化：接收Driver实例，设置默认超时时间（5秒），加载YAML元素配置。"""
+    def __init__(self, driver):
+        """初始化：接收Driver实例，设置默认超时时间（5秒），加载元素配置。"""
         self.driver = driver
         self.default_timeout = 5
-        from Note_Automation.Note_class.Note_element.element_loader import ElementLoader
-        self.element_loader = ElementLoader(yaml_path=yaml_path)
+        from Note_Automation.Note_class.Note_element.element_loader import get_element_loader
+        self.element_loader = get_element_loader()
 
-    # ---- YAML 元素访问 ----
+    # ---- 元素访问 ----
 
     def get_element(self, element_key):
-        """从YAML配置获取元素信息（locator已转为(By, value)元组）。"""
+        """从元素定义获取元素信息（locator已转为(By, value)元组）。"""
         return self.element_loader.get_element_info(element_key)
 
     def get_element_source(self, element_key):
@@ -259,8 +270,8 @@ class Base_note_class:
         return self.element_loader.get_key_source(element_key)
 
     def get_element_line(self, element_key):
-        """返回元素键在 YAML 文件中的行号。"""
-        return self.element_loader.get_key_line(element_key)
+        """返回元素键来源（Sheet 名）。"""
+        return self.element_loader.get_key_source(element_key)
 
     @staticmethod
     def escape_xpath_text(text):
@@ -618,6 +629,38 @@ class Operation_method(Base_note_class):
                 if self._is_xpath_expression(text_value):
                     return self.xpath_element_visible(xpath=text_value)
                 return self.xpath_check_display_timeout(text_value)
+
+    def check_multi_elements(self, checks: list[dict], *, element_key: str = "", timeout: int = 5) -> bool:
+        """多元素检查：逐个等待可见 + 可选文本校验。
+
+        checks 格式: [{"locator": (By, value), "text": "期望文本"}, ...]
+        文本为空则仅检查可见性。
+        任一元素不可见或文本不匹配 → 抛出 AssertionError。
+        """
+        if element_key:
+            _push_element_ctx('check_multi_elements', element_key)
+            info = self.get_element(element_key)
+            display = info.get('operation') or info.get('name') or element_key
+        else:
+            display = "多元素检查"
+
+        with allure.step(f"多元素检查「{display}」"):
+            for i, check in enumerate(checks):
+                by, loc = check["locator"]
+                expected = check.get("text", "")
+
+                el = self.check_timeout(by, loc, timeout=timeout)
+                if not el or not el.is_displayed():
+                    raise AssertionError(f"多元素断言[{i}]: ({by}, {loc}) 不可见")
+
+                if expected:
+                    actual = (el.text or "").strip()
+                    if actual != expected:
+                        raise AssertionError(
+                            f"多元素断言[{i}]: 文本不匹配 期望='{expected}', 实际='{actual}'"
+                        )
+
+        return True
 
     def xpath_parent_click(self, xpath=None, *, element_key=None, by=None, locator=None, should_click=True):
         """
@@ -1012,11 +1055,12 @@ class Operation_method(Base_note_class):
 
     # ---- 输入框 ----
 
-    def wait_input_box(self, by_method=None, locator=None, name=None, *, element_key=None):
+    def wait_input_box(self, by_method=None, locator=None, name=None, *, element_key=None, hide_keyboard=True):
         """
         定位输入框并输入内容。
         - 旧用法: wait_input_box(By.ID, "com.onyx:id/search_et_input", "搜索词")
         - 新用法: wait_input_box(element_key="search_input")  # name 从 YAML 取
+        - hide_keyboard=False 时跳过收起键盘（部分弹窗收起键盘后会关闭）
         """
         if element_key is not None:
             loc = self._resolve_locator(element_key)
@@ -1042,10 +1086,11 @@ class Operation_method(Base_note_class):
                 input_box.set_text(input_text)
             else:
                 input_box.send_keys(input_text)
-            try:
-                self.driver.hide_keyboard()
-            except Exception:
-                pass
+            if hide_keyboard:
+                try:
+                    self.driver.hide_keyboard()
+                except Exception:
+                    pass
             return True
 
     # ---- 长按 ----

@@ -2,6 +2,9 @@ from selenium.common.exceptions import TimeoutException, NoSuchElementException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.wait import WebDriverWait
 from Note_Automation.Note_class.Note_class import Operation_method
+from Note_Automation.Devices_list.Device_basic_information import (
+    TEST_FILES_DISPLAY_ROOT, TEST_FILES_DIR_NOTE_RENDER,
+)
 from Note_Automation.config import driver
 from Note_Automation.Note_class.Logcat import Logcat
 from selenium.webdriver.support import expected_conditions as EC
@@ -340,7 +343,7 @@ class Test_Render_Time:
 
         self.public.enter_storage()
         self.method.by_name_click(element_key="设备相关.存储卷列表")
-        self.public.get_file("笔记自动化测试文件", "固件迭代测试项（笔记渲染）")
+        self.public.get_file(TEST_FILES_DISPLAY_ROOT, TEST_FILES_DIR_NOTE_RENDER)
 
         note_names = [
             "笔记测试物料（多笔迹）- 用户提供",
