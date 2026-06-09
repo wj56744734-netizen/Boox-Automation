@@ -204,6 +204,15 @@ def _check_elements_by_xpath(xpath_text: str, mode: str,
     if not xpaths:
         raise ValueError("检查元素为空")
 
+    # 校验 XPath 格式（非法 XPath 传到 Appium 会产生巨量 Java 堆栈日志）
+    for xp in xpaths:
+        if not (xp.startswith('/') or xp.startswith('(')):
+            ctx = f"预期结果【{expected_key}】（步骤{step_seq}）" if expected_key else "元素检查"
+            raise ValueError(
+                f"{ctx}D列检查元素不是有效 XPath: {xp[:80]}\n"
+                f"  请检查飞书元素表「预期结果」sheet 的 D 列，该行内容看起来是中文描述而非 XPath"
+            )
+
     missing = []
     found = []
     for xpath in xpaths:
