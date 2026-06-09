@@ -82,11 +82,8 @@ boox_automation/
 │   ├── test_file_import.py  文件导入测试
 │   └── performance/         性能测试
 │
-├── scripts/                 独立运行入口
-│   └── run_report.py        Allure 报告入口
-│
-└── docs/                    文档
-    └── 使用指南.md
+└── scripts/                 独立运行入口
+    └── run_report.py        Allure 报告入口
 ```
 
 ## 架构概览
