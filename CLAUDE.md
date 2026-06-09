@@ -310,11 +310,14 @@ J/K 列职责分离：**J 列只做操作，K 列只做断言**。页面/弹窗�
 
 ### D 列 — 检查元素
 
-**格式**：每行一个 XPath 选择器，支持多设备「键：」分块。
+**格式**：每行一个 XPath 选择器，可选附加期望文本 `,期望文本`，支持多设备「键：」分块。
 
 ```
+// 仅检查元素存在
 //android.widget.TextView[@resource-id="com.onyx:id/title" and @text="手写笔记"]
-//android.widget.TextView[@resource-id="com.onyx:id/title" and @text="无边笔记"]
+
+// 检查元素存在 + 文本对比（逗号后为期望文本）
+//android.widget.TextView[@resource-id="com.onyx.android.note:id/tv_title"],请在录音或转写文字完成后，再使用导出功能
 
 国内：
 //android.widget.TextView[@resource-id="com.onyx:id/title" and @text="手写笔记"]
@@ -327,10 +330,10 @@ J/K 列职责分离：**J 列只做操作，K 列只做断言**。页面/弹窗�
 
 | K 列模式 | D 列检查逻辑 |
 |---|---|
-| `visible`（默认） | 所有 XPath 都能在页面中找到 → pass，任一找不到 → fail |
+| `visible`（默认） | 所有 XPath 都能找到 → pass；未找到或文本不匹配 → fail |
 | `not_visible` / `不存在` / `不可见` | 所有 XPath 都找不到 → pass，任一找到 → fail |
 
-无需 `XmlChecker`，直接用 `driver.find_element(By.XPATH, ...)`。
+检查步骤：1) `find_element` 找元素 → 2) 如有「,期望文本」则对比 `element.text`。
 
 ### 弹窗验证方式
 
