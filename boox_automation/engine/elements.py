@@ -249,12 +249,19 @@ def _check_elements_by_xpath(xpath_text: str, mode: str,
     ctx = f"预期结果【{expected_key}】（步骤{step_seq}）" if expected_key else "元素检查"
     if mode == 'not_visible':
         if found:
-            logger.info(f"{ctx}检查失败: {len(found)}个预期不可见的元素仍存在 {found}")
+            lines = [f"{ctx}检查失败:", *(f"  ↳ ✗ 仍可见: {xp}" for xp in found)]
+            logger.info("\n".join(lines))
             raise AssertionError(f"{ctx}预期不可见的元素仍然存在 ({len(found)}个): {found}")
         logger.info(f"{ctx}检查通过: {len(xpaths)}个元素均不存在（不可见模式）")
     else:
         if missing:
-            logger.info(f"{ctx}检查失败: {len(missing)}个预期可见的元素未找到 {missing}")
+            lines = [f"{ctx}检查失败 ({len(missing)}/{len(xpaths)}):"]
+            for xp in xpaths:
+                if xp in missing:
+                    lines.append(f"  ↳ ✗ 未找到: {xp}")
+                else:
+                    lines.append(f"  ↳ ✓ 存在:   {xp}")
+            logger.info("\n".join(lines))
             raise AssertionError(f"{ctx}预期可见的元素未找到 ({len(missing)}个): {missing}")
         logger.info(f"{ctx}检查通过: {len(xpaths)}个元素均存在（可见模式）")
 
