@@ -313,11 +313,12 @@ class TestExcelRunner:
         if not case.expected_pages:
             logger.warning(f"R{case.row_number} [{case.title}] 无预期结果，缺少断言")
 
-        # 过滤无 element_key 的步骤（设备级 action 除外）
+        # 过滤无 element_key 的步骤（设备级 action / skip 除外，需保留以触发 K 列预期结果）
         for s in case.steps:
-            if not s.element_key and s.action not in _DEVICE_ACTIONS:
+            if not s.element_key and s.action not in _DEVICE_ACTIONS and s.action != "skip":
                 s.status = "skip"
-        steps = [s for s in case.steps if s.element_key or s.action in _DEVICE_ACTIONS]
+        steps = [s for s in case.steps
+                 if s.element_key or s.action in _DEVICE_ACTIONS or s.action == "skip"]
 
         try:
             with allure.step(case_id):
