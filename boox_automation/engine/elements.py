@@ -204,7 +204,8 @@ def _check_elements_by_xpath(xpath_text: str, mode: str,
     if not xpaths:
         raise ValueError("检查元素为空")
 
-    # 校验 XPath 格式（非法 XPath 传到 Appium 会产生巨量 Java 堆栈日志）
+    # 校验 XPath 格式 + 剥离行尾注释（非法 XPath 传到 Appium 会产生巨量 Java 堆栈日志）
+    sanitized = []
     for xp in xpaths:
         if not (xp.startswith('/') or xp.startswith('(')):
             ctx = f"预期结果【{expected_key}】（步骤{step_seq}）" if expected_key else "元素检查"
@@ -212,6 +213,29 @@ def _check_elements_by_xpath(xpath_text: str, mode: str,
                 f"{ctx}D列检查元素不是有效 XPath: {xp[:80]}\n"
                 f"  请检查飞书元素表「预期结果」sheet 的 D 列，该行内容看起来是中文描述而非 XPath"
             )
+        # 剥离行尾中文注释（如 '//xpath,描述文字' → '//xpath'）
+        # 需跳过引号内的中文（如 @text="笔记" 中的）
+        in_quote = False
+        quote_char = ''
+        cut = -1
+        for i, ch in enumerate(xp):
+            if ch in ('"', "'") and (in_quote is False or ch == quote_char):
+                in_quote = not in_quote
+                if in_quote:
+                    quote_char = ch
+                else:
+                    quote_char = ''
+                continue
+            if not in_quote and '一' <= ch <= '鿿':
+                cut = i
+                break
+        if cut > 0:
+            before = xp[:cut].rstrip(' ,，;；')
+            if before:
+                sanitized.append(before)
+                continue
+        sanitized.append(xp)
+    xpaths = sanitized
 
     missing = []
     found = []
