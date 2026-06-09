@@ -1,0 +1,257 @@
+# 待补充 平台
+
+
+
+
+
+Leaf:
+  region: 全球
+  size: '7'
+  colour: 黑白
+
+Leaf2:
+  region: 海外
+  size: '7'
+  colour: 黑白
+
+Leaf2_P:
+  region: 国内
+  size: '7'
+  colour: 黑白
+
+Leaf3:
+  region: 国内
+  size: '7'
+  colour: 黑白
+
+Leaf3C:
+  region: 国内
+  size: '7'
+  colour: 彩色
+
+
+
+Max2:
+  region: 全球
+  size: '13.3'
+  colour: 黑白
+
+Max2Pro:
+  region: 全球
+  size: '13.3'
+  colour: 黑白
+
+Max3:
+  region: 全球
+  size: '13.3'
+  colour: 黑白
+
+MaxLumi:
+  region: 全球
+  size: '13.3'
+  colour: 黑白
+
+
+
+Note:
+  region: 全球
+  size: '10.3'
+  colour: 黑白
+
+Note2:
+  region: 全球
+  size: '10.3'
+  colour: 黑白
+
+Note3:
+  region: 全球
+  size: '10.3'
+  colour: 黑白
+
+Note3Lite(定制):
+  region: 国内
+  size: '10.3'
+  colour: 黑白
+
+
+
+
+NoteAir:
+  region: 全球
+  size: '10.3'
+  colour: 黑白
+
+
+
+NoteAir2P:
+  region: 海外
+  type: 阅读器
+  size: '10.3'
+  colour: 黑白
+
+NoteLite:
+  region: 国内
+  size: '10.3'
+  colour: 黑白
+
+NoteMiniC:
+  region: 海外
+  size: '8.52'
+  colour: 彩色
+
+NoteP:
+  region: 全球
+  size: '10.3'
+  colour: 黑白
+
+NotePro:
+  region: 全球
+  size: '10.3'
+  colour: 黑白
+
+NoteS:
+  region: 全球
+  size: '9.7'
+  colour: 黑白
+
+
+
+
+
+Nova:
+  region: 全球
+  size: '7.8'
+  colour: 黑白
+
+Nova2:
+  region: 全球
+  size: '7.8'
+  colour: 黑白
+
+Nova3:
+  region: 全球
+  size: '7.8'
+  colour: 黑白
+
+Nova3Color:
+  region: 全球
+  size: '7.8'
+  colour: 彩色
+
+NovaAir:
+  region: 全球
+  size: '7.8'
+  colour: 黑白
+
+NovaAir2:
+  region: 海外
+  size: '7.8'
+  colour: 黑白
+
+NovaAirS:
+  region: 全球
+  size: '7.8'
+  colour: 黑白
+
+NovaPlus:
+  region: 全球
+  size: '7.8'
+  colour: 黑白
+
+NovaPro:
+  region: 全球
+  size: '7.8'
+  colour: 黑白
+
+
+
+
+
+
+
+
+
+
+
+Page:
+  region: 海外
+  size: '7'
+  colour: 黑白
+
+
+
+
+
+Poke2:
+  region: 全球
+  size: '6'
+  colour: 黑白
+
+Poke2Color:
+  region: 海外
+  size: '6'
+  colour: 彩色
+
+Poke3:
+  region: 全球
+  size: '6'
+  colour: 黑白
+
+Poke4:
+  region: 国内
+  size: '6'
+  colour: 黑白
+
+Poke4 (海外):
+  region: 海外
+  size: '6'
+  colour: 黑白
+
+Poke4Lite:
+  region: 国内
+  size: '6'
+  colour: 黑白
+
+Poke4S:
+  region: 国内
+  size: '6'
+  colour: 黑白
+
+Poke5:
+  region: 国内
+  size: '6'
+  colour: 黑白
+
+Poke5Lite:
+  region: 海外
+  size: '6'
+  colour: 黑白
+
+Poke5P:
+  region: 海外
+  size: '6'
+  colour: 黑白
+
+Poke5S:
+  region: 国内
+  size: '6'
+  colour: 黑白
+
+Poke6:
+  region: 国内
+  size: '6'
+  colour: 黑白
+
+Poke6S:
+  region: 国内
+  size: '6'
+  colour: 黑白
+
+
+
+
+
+Poke_Pro:
+  region: 全球
+  size: '6'
+  colour: 黑白

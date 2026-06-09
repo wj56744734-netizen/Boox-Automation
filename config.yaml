@@ -1,113 +1,187 @@
 # ============================================================
-# Note_Automation 配置文件
-# 
-# 使用说明：
-# 1. 所有配置都有默认值，可根据需要覆盖
-# 2. 支持点号路径访问：Config.get('timeout.default')
-# 3. 配置文件使用 YAML 格式
-# 4. 用户配置会与默认配置深度合并（只覆盖你指定的项）
+# boox_automation 配置文件
 #
-# 影响范围标注：
-#   [全局]      = 影响所有操作，需谨慎调整
-#   [单个方法]  = 只影响特定方法
-#   [特定场景]  = 只在特定场景下生效
+# 环境变量优先级 > 配置文件，详见各段注释
 # ============================================================
 
 # ==================== 超时配置 ====================
 timeout:
-  # 【影响范围】全局 - 所有元素等待的默认超时时间
-  # 调整建议：
-  #   - 网络慢/App响应慢 → 调大（如 10）
-  #   - 追求测试速度 → 调小（如 3）
-  #   - 仅影响未指定 timeout 的方法调用
-  default: 5              # 单位：秒
+  # 元素查找默认超时，所有未显式指定 timeout 的方法共用
+  default: 5              # 秒
 
-  # 【影响范围】wait_for_press_name、_safe_long_press
-  # 调整建议：
-  #   - App长按响应慢 → 调大（如 3000）
-  #   - 长按菜单弹出慢 → 调大
-  # 注意：此值为毫秒，不要与 default 混淆
-  long_press: 2000        # 单位：毫秒
+  # 长按持续时间
+  long_press: 2000        # 毫秒
 
-  # 【影响范围】click_slice（屏幕滑动操作）
-  # 调整建议：
-  #   - 滑动太快导致操作失败 → 调大（如 500）
-  #   - 追求速度 → 调小（如 200）
-  swipe: 300              # 单位：毫秒
+  # 屏幕滑动持续时间
+  swipe: 300              # 毫秒
 
-  # 【影响范围】wait_input_box（输入框操作）
-  # 调整建议：
-  #   - 键盘收起慢 → 调大（如 2）
-  #   - 通常不需要调整
-  keyboard_hide: 1        # 单位：秒
+  # 键盘收起后等待时间
+  keyboard_hide: 1        # 秒
+
+  # WebDriver 隐式等待，影响 find_element 全局行为
+  implicit_wait: 10       # 秒
+
+  # 被测应用冷启动超时（从 adb shell am start 到首页可见）
+  app_launch: 30          # 秒
+
+  # 文件导入操作超时（大文件导入场景耗时较长）
+  import_duration: 180    # 秒
 
 # ==================== 重试配置 ====================
 retry:
-  # 【影响范围】retry_and_handle_exceptions 装饰器
-  # 调整建议：
-  #   - 元素经常延迟出现 → 调大（如 5）
-  #   - 追求测试速度 → 调小（如 2）
-  #   - 设为 1 可完全禁用重试
-  max_attempts: 3         # 单位：次
+  # retry_and_handle_exceptions 装饰器最大重试次数，设为 1 禁用重试
+  max_attempts: 3         # 次
 
-  # 【影响范围】retry_and_handle_exceptions 装饰器
-  # 调整建议：
-  #   - App响应慢 → 调大（如 2）
-  #   - 追求测试速度 → 调小（如 0.5）
-  delay: 1.5                # 单位：秒
+  # 两次重试之间的等待间隔
+  delay: 1.5              # 秒
 
-  # 【影响范围】_safe_click、_safe_long_press
-  # 调整建议：
-  #   - 页面经常刷新导致元素过时 → 调大（如 3）
-  #   - 页面稳定 → 调小（如 1）
-  #   - 设为 1 可禁用 StaleElement 重试
-  element_click: 2        # 单位：次
+  # _safe_click / _safe_long_press 的 StaleElement 重试次数
+  element_click: 2        # 次
+
+  # StaleElement 重试前等待时间
+  stale_element_delay: 0.5  # 秒
+
+# ==================== Appium 配置 ====================
+appium:
+  # Appium Server 地址，环境变量 APPIUM_HOST / APPIUM_PORT 可覆盖
+  host: "127.0.0.1"
+  port: 4723
+
+  # 自动拉起 Appium 时的启动等待超时
+  startup_timeout: 15     # 秒
+
+  # 创建 Session 时传入的 W3C capabilities
+  capabilities:
+    platformName: Android
+    automationName: UiAutomator2
+    newCommandTimeout: 3600    # 秒，无命令自动退出 session
+    adbExecTimeout: 120000     # 毫秒，ADB 命令执行超时
+
+# ==================== ADB 配置 ====================
+adb:
+  # 等待设备就绪（已连接 + 可响应 ADB 命令）的最大尝试次数和间隔
+  device_ready_retries: 5   # 次
+  device_ready_delay: 2     # 秒
+
+  # 普通 ADB 命令失败后的重试次数和间隔
+  command_retries: 3        # 次
+  command_delay: 2          # 秒
+
+# ==================== Excel / 用例配置 ====================
+excel:
+  # --- 用例 ---
+  # 用例 Sheet 名（本地和飞书共用）
+  test_case_sheet: "笔记"
+
+  # 优先级筛选：P0=仅P0  P1=P1+P2  P2=仅P2  空=全部
+  priority_filter: "P0"
+
+  # 模块筛选：逗号分隔，仅运行 D 列匹配的模块。空=全部
+  # 环境变量 NOTE_TEST_MODULES 可覆盖（逗号分隔）
+  test_modules: ""
+
+  # 本地用例文件名（仅 USE_LOCAL_EXCEL=1 时生效）
+  test_case_file: "test_cases.xlsx"
+
+  # --- 元素 ---
+  # 本地元素文件名（仅 USE_LOCAL_EXCEL=1 时生效）
+  elements_file: "elements.xlsx"
+
+  # 结果回写列（0-based，12=M 列，13=N 列）
+  result_column: 12
+  remark_column: 13
+
+# ==================== 飞书配置 ====================
+feishu:
+  # 飞书自建应用凭证，用于获取 tenant_access_token
+  # 环境变量 FEISHU_APP_ID / FEISHU_APP_SECRET 可覆盖
+  app_id: "cli_a94cb2b1b1f81cb1"
+  app_secret: "64CPVsf3cQmW4Af7iyq7jhR2ssz8pEgd"
+
+  # --- 用例电子表格 ---
+  # 直接填飞书表格 URL 或纯 token 均可，程序会自动提取
+  # 环境变量 FEISHU_TEST_CASE_TOKEN 可覆盖
+  test_case_token: "https://s07005grio.feishu.cn/sheets/IXywsB0xehetnKtVrEJc2ZkxnSd"
+  # 要加载的用例 Sheet 名列表，列结构需与"笔记"sheet 一致
+  # 环境变量 FEISHU_TEST_CASE_SHEETS 可覆盖（逗号分隔）
+  test_case_sheets:
+    - "笔记"
+  # - "设置"    ← 后续模块结构对齐后取消注释即可
+
+  # --- 元素电子表格 ---
+  # 同用例，填 URL 或纯 token 均可
+  # 环境变量 FEISHU_ELEMENTS_TOKEN 可覆盖
+  elements_token: "https://s07005grio.feishu.cn/sheets/LjYzsLHSOh3xyItZ7TLcqnqvn3e?sheet=0dVwPT"
+  # 元素 Sheet 名前缀，匹配此前缀的 Sheet 视为元素定义页
+  # 留空则加载全部 sheet（排除"使用说明"）
+  # 环境变量 FEISHU_ELEMENT_SHEET_PREFIX 可覆盖
+  element_sheet_prefix: ""
+
+  # --- 通用 ---
+  # 飞书群聊 ID，用于发送测试报告通知（可选）
+  chat_id: "oc_126bbbf208297b96a323413ffeaef1d8"
+
+  # curl 调用飞书 API 的超时时间
+  curl_timeout: 15        # 秒
+
+  # tenant_access_token 缓存时长（有效期 2h，缓存 1.5h 提前刷新）
+  token_cache_ttl: 5400   # 秒
+
+# ==================== 日志捕获配置 ====================
+logcat:
+  # 单次日志捕获最大等待时间（性能测试中抓取特定 log tag 用）
+  capture_timeout: 80     # 秒
 
 # ==================== 截图配置 ====================
 screenshot:
-  # 【影响范围】失败截图保存目录
-  # 调整建议：
-  #   - 统一保存到项目根目录 Test_report/screenshots/
-  #   - 每日自动清理超过1天的截图
+  # 失败截图保存目录
   dir: 'Test_report/screenshots'
 
-  # 【影响范围】失败截图文件名
-  # 调整建议：
-  #   - 中文环境 → '失败'
-  #   - 英文环境 → 'failed'
+  # 截图文件名前缀
   prefix: '失败'
 
-  # 【影响范围】所有失败场景（装饰器、Toast检测）
-  # 调整建议：
-  #   - 调试时 → true（保留截图便于分析）
-  #   - 正式环境 → false（减少IO开销）
+  # 是否启用失败自动截图
   enabled: true
 
 # ==================== Toast 检测配置 ====================
 toast:
-  # 【影响范围】wait_check_toast
-  # 调整建议：
-  #   - Toast显示慢 → 调大（如 10）
-  #   - Toast显示快 → 调小（如 3）
-  timeout: 5              # 单位：秒
+  # Toast 文本匹配超时
+  timeout: 5              # 秒
 
-  # 【影响范围】wait_check_toast（同步模式）
-  # 调整建议：
-  #   - Toast不稳定 → 调大（如 5）
-  #   - Toast稳定 → 调小（如 2）
-  retry: 3                # 单位：次
+  # Toast 检测重试次数（同步模式）
+  retry: 3                # 次
 
-  # 【影响范围】wait_check_toast（同步模式）
-  # 调整建议：
-  #   - 设备慢 → 调大（如 1）
-  #   - 追求速度 → 调小（如 0.2）
-  retry_delay: 0.5        # 单位：秒
+  # Toast 重试间隔
+  retry_delay: 0.5        # 秒
+
+# ==================== 产物清理配置 ====================
+cleanup:
+  # 每类产物（截图/报告/日志）保留最近 N 轮，超出自动删除
+  # 环境变量 NOTE_ARTIFACTS_KEEP_LATEST 可覆盖
+  keep_latest: 5          # 轮
+
+# ==================== 路径配置 ====================
+paths:
+  # 外部测试数据文件路径（如 shapeTestdata.xlsx），空则跳过相关用例
+  shape_data: ""
+
+# ==================== Driver 配置 ====================
+driver:
+  # session 连续失败 N 次后终止测试，避免无限重试
+  failure_threshold: 3    # 次
+
+# ==================== 缓存配置 ====================
+cache:
+  # 本地缓存有效期，超期后优先从云端刷新
+  max_age_seconds: 86400  # 秒，默认 24 小时
+
+  # 缓存文件目录（相对于 boox_automation/）
+  dir: "data/.cache"
 
 # ==================== 项目配置 ====================
 project:
-  # 【影响范围】主要用于日志和报告
-  name: 'Note_Automation'
+  # 项目名称，用于日志和报告标题
+  name: 'boox_automation'
 
-  # 【影响范围】失败截图、装饰器降级逻辑
-  # 注意：这是 fallback 方案，正常情况从实例获取 driver
-  driver_import_path: 'Note_Automation.config.driver'
+  # Driver 导入路径（fallback，正常情况下从实例获取）
+  driver_import_path: 'boox_automation.driver.driver'

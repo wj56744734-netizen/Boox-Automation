@@ -1,0 +1,8 @@
+# 6690 平台
+
+NoteX6:
+  platform: '6690'
+  region: 国内
+  type: 阅读器
+  size: '10.3'
+  colour: 黑白

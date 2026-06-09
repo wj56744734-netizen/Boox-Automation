@@ -15,9 +15,10 @@ __pycache__/
 # Test artifacts and reports
 allure-results/
 allure-report/
-Note_Automation/artifacts/
-Note_Automation/scripts/Note_page_contrast/temporary_image/
-Note_Automation/scripts/Note_page_contrast/exception_page/
+boox_automation/artifacts/
+boox_automation/data/.cache/
+boox_automation/scripts/Note_page_contrast/temporary_image/
+boox_automation/scripts/Note_page_contrast/exception_page/
 
 # Runtime logs
 *.log

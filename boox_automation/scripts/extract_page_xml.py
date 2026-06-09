@@ -1,0 +1,150 @@
+#!/usr/bin/env python3
+"""从当前设备提取 page_source，过滤无意义元素后输出精简 XML。
+
+用途: 将输出粘贴到飞书"预期结果"sheet 的 C 列（页面XML）。
+
+默认行为: PyCharm 直接运行 → 保存到 artifacts/page_xml/ 目录
+           -o 指定路径   → 保存到指定文件
+           --stdout       → 打印到终端
+"""
+from __future__ import annotations
+
+import argparse
+import sys
+import time
+import xml.etree.ElementTree as ET
+from pathlib import Path
+
+# 不需要保留的属性（硬编码过滤）
+_IGNORED_ATTRS = {
+    'bounds', 'index', 'instance', 'package', 'rotation',
+    'display-id', 'NAF', 'focusable', 'clickable', 'enabled',
+    'checked', 'checkable', 'scrollable', 'long-clickable',
+    'selected', 'focused', 'drawing-order',
+}
+
+# 只保留有以下属性之一的元素
+_MEANINGFUL_ATTRS = {'resource-id', 'text', 'content-desc'}
+
+
+def _is_meaningful(elem: ET.Element) -> bool:
+    for attr in _MEANINGFUL_ATTRS:
+        val = elem.get(attr, '')
+        if val and val.strip():
+            return True
+    return False
+
+
+def _clean_attrs(elem: ET.Element) -> None:
+    for attr in list(elem.attrib):
+        if attr in _IGNORED_ATTRS:
+            del elem.attrib[attr]
+
+
+def _prune_tree(elem: ET.Element) -> bool:
+    """递归裁剪树。返回 True = 该元素应保留。"""
+    children_to_keep = []
+    for child in list(elem):
+        if _prune_tree(child):
+            children_to_keep.append(child)
+        else:
+            elem.remove(child)
+
+    _clean_attrs(elem)
+
+    if _is_meaningful(elem) or children_to_keep:
+        return True
+    return False
+
+
+def extract(xml_string: str, compact: bool = True) -> str:
+    """从全量 page_source XML 提取精简版。"""
+    root = ET.fromstring(xml_string)
+
+    if compact:
+        _prune_tree(root)
+    else:
+        for elem in root.iter():
+            _clean_attrs(elem)
+
+    return ET.tostring(root, encoding='unicode')
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description='从设备提取 page_source 并输出精简 XML'
+    )
+    parser.add_argument(
+        '--from-file', type=str, default=None,
+        help='从 Appium Inspector 导出的 XML 文件离线处理（无需连接设备）'
+    )
+    parser.add_argument(
+        '-o', '--output', type=str, default=None,
+        help='输出到指定文件（默认自动保存到 artifacts/page_xml/）'
+    )
+    parser.add_argument(
+        '--stdout', action='store_true',
+        help='打印到终端而非保存文件'
+    )
+    parser.add_argument(
+        '--full', action='store_true',
+        help='输出全量 XML（只清理属性，不过滤空容器）'
+    )
+    args = parser.parse_args()
+
+    # 获取原始 XML
+    if args.from_file:
+        print(f'从文件读取: {args.from_file}', file=sys.stderr)
+        try:
+            with open(args.from_file, 'r', encoding='utf-8') as f:
+                raw = f.read()
+        except FileNotFoundError:
+            print(f'错误: 文件不存在 — {args.from_file}', file=sys.stderr)
+            sys.exit(1)
+    else:
+        print('正在连接设备并获取 page_source ...', file=sys.stderr)
+        try:
+            from boox_automation.driver import ensure_driver_alive
+            ensure_driver_alive(reason="extract_page_xml")
+            from boox_automation.driver import driver
+            raw = driver.page_source
+        except Exception as e:
+            print(f'错误: 无法获取 page_source — {e}', file=sys.stderr)
+            print('请确认 Appium 已启动且设备已连接', file=sys.stderr)
+            print('或使用 --from-file 处理离线 XML 文件', file=sys.stderr)
+            sys.exit(1)
+
+    if not raw:
+        print('错误: page_source 为空', file=sys.stderr)
+        sys.exit(1)
+
+    print(f'原始 XML 长度: {len(raw)} 字符', file=sys.stderr)
+
+    result = extract(raw, compact=not args.full)
+
+    pct = len(result) * 100 // max(len(raw), 1)
+    print(f'精简后长度: {len(result)} 字符 ({pct}%)', file=sys.stderr)
+
+    if args.stdout:
+        # 显式指定终端输出
+        print(result)
+        return
+
+    # 确定输出路径
+    if args.output:
+        output_path = Path(args.output)
+    else:
+        # 自动生成路径: artifacts/page_xml/YYYY-MM-DD/HHmmss.xml
+        today = time.strftime('%Y-%m-%d')
+        ts = time.strftime('%H%M%S')
+        base = Path(__file__).resolve().parent.parent  # scripts/ → boox_automation/
+        output_dir = base / 'artifacts' / 'page_xml' / today
+        output_dir.mkdir(parents=True, exist_ok=True)
+        output_path = output_dir / f'{ts}.xml'
+
+    output_path.write_text(result, encoding='utf-8')
+    print(f'\n✓ 已保存: {output_path}', file=sys.stderr)
+
+
+if __name__ == '__main__':
+    main()
