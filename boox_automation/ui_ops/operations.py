@@ -1433,10 +1433,10 @@ class Operation_method(Base_note_class):
     def swipe_direction(self, direction: str):
         """全屏方向滑动。direction: up/down/left/right。"""
         direction_map = {
-            "up": (0.5, 0.3, 0.5, 0.7),
-            "down": (0.5, 0.7, 0.5, 0.3),
-            "left": (0.7, 0.5, 0.3, 0.5),
-            "right": (0.3, 0.5, 0.7, 0.5),
+            "up": (0.5, 0.35, 0.5, 0.65),
+            "down": (0.5, 0.65, 0.5, 0.35),
+            "left": (0.65, 0.5, 0.35, 0.5),
+            "right": (0.35, 0.5, 0.65, 0.5),
         }
         if direction not in direction_map:
             raise ValueError(f"不支持的滑动方向: {direction}，可选: {list(direction_map.keys())}")
