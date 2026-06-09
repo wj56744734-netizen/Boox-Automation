@@ -35,6 +35,7 @@ _ACTION_CN_TO_EN = {
     "校验toast": "assert_toast",
     "点击坐标": "click_coord",
     "长按坐标": "long_press_coord",
+    "滑动": "swipe_coord",
 }
 
 # 设备级 action（不需要元素匹配，纯关键词驱动）
@@ -830,7 +831,7 @@ class ElementMatcher:
 
         explicit = info.get("action", "")
         valid_actions = ("click", "assert_toast", "input", "long_press",
-                         "click_coord", "long_press_coord")
+                         "click_coord", "long_press_coord", "swipe_coord")
         if explicit in valid_actions:
             return explicit
 

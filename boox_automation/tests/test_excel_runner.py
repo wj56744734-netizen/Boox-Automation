@@ -392,6 +392,9 @@ def _dispatch_step(method, public, step, variables: dict[str, str] | None = None
     elif step.action == "long_press_coord":
         method.long_press_by_coord(ek)
 
+    elif step.action == "swipe_coord":
+        method.swipe_by_coord(ek)
+
     elif step.action == "press_back":
         method.press_back()
 

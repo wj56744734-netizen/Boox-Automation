@@ -201,6 +201,7 @@ from boox_automation.core.config import timeout_default, retry_max_attempts
 | `校验toast` | 校验 Toast 提示 | XPath |
 | `点击坐标` | 按屏幕比例坐标点击 | `x,y` 如 `0.5,0.3` |
 | `长按坐标` | 按屏幕比例坐标长按 | `x,y` 如 `0.5,0.3` |
+| `滑动` | 按屏幕比例坐标滑动 | `x1,y1,x2,y2` 如 `0.7,0.5,0.3,0.5` |
 
 `assert`/`assert_not`/`assert_text`/`dismiss` — **已废弃**，页面/弹窗验证统一由 K 列预期结果完成。
 
@@ -213,6 +214,7 @@ from boox_automation.core.config import timeout_default, retry_max_attempts
 | 长按 | `长按` | 是 |
 | 点击坐标 | `点击坐标` | 是，locator 为 `x,y` |
 | 长按坐标 | `长按坐标` | 是，locator 为 `x,y` |
+| 滑动 | `滑动` | 是，locator 为 `x1,y1,x2,y2` |
 | 上滑/向上滑动/下滑/向下滑动/左滑/向左滑动/右滑/向右滑动 | 方向滑动 | **否**，纯关键词触发 |
 | 按返回键/返回键 | 系统返回键 | **否**，纯关键词触发 |
 | 检查/查看/校验（步骤开头） | 跳过 | —，K 列预期结果接管 |

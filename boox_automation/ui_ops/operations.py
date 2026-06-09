@@ -1485,6 +1485,27 @@ class Operation_method(Base_note_class):
             self.driver.tap([(x, y)], duration)
             self._settle_ui()
 
+    def swipe_by_coord(self, element_key: str, duration: int = 300):
+        """按元素 locator 中的比例坐标滑动。locator 格式: x1,y1,x2,y2（起点→终点）。"""
+        _push_element_ctx('swipe_by_coord', element_key)
+        info = self.get_element(element_key)
+        loc_str = info['locator'][1] if isinstance(info.get('locator'), (list, tuple)) else str(info.get('locator', ''))
+        try:
+            parts = [p.strip() for p in loc_str.split(',')]
+            x1, y1, x2, y2 = float(parts[0]), float(parts[1]), float(parts[2]), float(parts[3])
+        except (ValueError, IndexError):
+            raise ValueError(f"滑动元素【{element_key}】locator 格式错误: {loc_str}，应为 x1,y1,x2,y2")
+
+        screen_size = self.driver.get_window_size()
+        start_x = int(screen_size['width'] * x1)
+        start_y = int(screen_size['height'] * y1)
+        end_x = int(screen_size['width'] * x2)
+        end_y = int(screen_size['height'] * y2)
+
+        with allure.step(f"滑动 ({x1:.2f},{y1:.2f})→({x2:.2f},{y2:.2f})"):
+            self.driver.swipe(start_x, start_y, end_x, end_y, duration=duration)
+            self._settle_ui()
+
     # ---- 系统键 ----
 
     def press_back(self):

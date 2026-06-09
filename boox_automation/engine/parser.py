@@ -34,6 +34,9 @@ _ACTION_MAP = {
     "向右滑动": "swipe_right",
     "右滑": "swipe_right",
 
+    # ── 滑动（需【】匹配飞书元素，locator=x1,y1,x2,y2）──
+    "滑动": "swipe_coord",
+
     # ── 坐标操作（需【】匹配飞书元素，locator=x,y）──
     "点击坐标": "click_coord",
     "长按坐标": "long_press_coord",
