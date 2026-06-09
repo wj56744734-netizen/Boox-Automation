@@ -27,6 +27,9 @@ timeout:
   # 文件导入操作超时（大文件导入场景耗时较长）
   import_duration: 180    # 秒
 
+  # 预期结果检查前等待延时（页面元素加载缓冲）
+  expected_check_delay: 1.5  # 秒
+
 # ==================== 重试配置 ====================
 retry:
   # retry_and_handle_exceptions 装饰器最大重试次数，设为 1 禁用重试

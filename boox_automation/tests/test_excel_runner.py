@@ -8,6 +8,7 @@
 from __future__ import annotations
 import logging
 import re
+import time
 from pathlib import Path
 import allure
 import pytest
@@ -440,6 +441,10 @@ def _dispatch_expected_page(method, ep) -> None:
         method.wait_check_toast(toast_false=ep.expected_text, toast_timeout=5)
         ep.status = 'pass'
         return
+
+    # 页面加载缓冲延时，避免元素未渲染完就检查
+    from boox_automation.core.config import get_float
+    time.sleep(get_float('timeout.expected_check_delay', 1.5))
 
     loader = get_element_loader()
     page_info = loader.get_expected_page(ep.expected_key)
