@@ -460,8 +460,8 @@ def _dispatch_expected_page(method, ep) -> None:
                 raise
             except Exception as e:
                 logger.error(f"预期结果【{ep.tag}】（key={ep.expected_key}）元素检查失败: {e}")
-                ep.status = "skip"
-                return
+                ep.status = "fail"
+                raise
 
     # C 列: 页面 XML
     raw_content = page_info.get("content", "")
