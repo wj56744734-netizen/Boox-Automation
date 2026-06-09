@@ -24,7 +24,7 @@ _IGNORED_ATTRS = {
 }
 
 # 只保留有以下属性之一的元素
-_MEANINGFUL_ATTRS = {'resource-id', 'text', 'content-desc'}
+_MEANINGFUL_ATTRS = {'resource-id'}
 
 
 def _is_meaningful(elem: ET.Element) -> bool:
@@ -120,10 +120,27 @@ def main():
 
     print(f'原始 XML 长度: {len(raw)} 字符', file=sys.stderr)
 
+    # 原始元素总数
+    root_before = ET.fromstring(raw)
+    total_count = sum(1 for _ in root_before.iter())
+
     result = extract(raw, compact=not args.full)
 
     pct = len(result) * 100 // max(len(raw), 1)
     print(f'精简后长度: {len(result)} 字符 ({pct}%)', file=sys.stderr)
+
+    # 统计并列出保留的元素
+    root_after = ET.fromstring(result)
+    kept_count = sum(1 for _ in root_after.iter())
+    print(f'\n元素统计: 原始 {total_count} → 保留 {kept_count} ({kept_count * 100 // max(total_count, 1)}%)', file=sys.stderr)
+    print('-' * 60, file=sys.stderr)
+    for i, elem in enumerate(root_after.iter(), 1):
+        tag = elem.tag
+        rid = elem.get('resource-id', '')
+        text = elem.get('text', '')
+        cd = elem.get('content-desc', '')
+        cls = elem.get('class', '')
+        print(f'  {i:3d}. {tag}  class={cls}  resource-id={rid}  text={text}  content-desc={cd}', file=sys.stderr)
 
     if args.stdout:
         # 显式指定终端输出

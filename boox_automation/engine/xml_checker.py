@@ -19,7 +19,7 @@ _IGNORED_ATTRS = {
 }
 
 # 有意义元素判定：至少有一个非空
-_MEANINGFUL_ATTRS = {'resource-id', 'text', 'content-desc'}
+_MEANINGFUL_ATTRS = {'resource-id'}
 
 
 def _is_meaningful(elem: ET.Element) -> bool:

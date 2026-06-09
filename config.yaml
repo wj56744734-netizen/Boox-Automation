@@ -28,7 +28,7 @@ timeout:
   import_duration: 180    # 秒
 
   # 预期结果检查前等待延时（页面元素加载缓冲）
-  expected_check_delay: 1.5  # 秒
+  expected_check_delay: 2  # 秒
 
 # ==================== 重试配置 ====================
 retry:

@@ -251,6 +251,7 @@ def _check_elements_by_xpath(xpath_text: str, mode: str,
             el = driver.find_element(By.XPATH, xpath)
             if expected_text:
                 actual = (el.text or "").strip()
+                expected_text = expected_text.replace("\\n", "\n")
                 if actual != expected_text:
                     text_mismatch.append((xpath, expected_text, actual))
                     continue  # 文本不匹配，不加入 found
