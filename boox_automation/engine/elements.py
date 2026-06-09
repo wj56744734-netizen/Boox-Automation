@@ -200,25 +200,21 @@ def _check_elements_by_xpath(xpath_text: str, mode: str,
     from selenium.common.exceptions import NoSuchElementException
     from boox_automation.driver import driver
 
-    xpaths = [line.strip() for line in xpath_text.split('\n') if line.strip()]
-    if not xpaths:
+    raw_lines = [line.strip() for line in xpath_text.split('\n') if line.strip()]
+    if not raw_lines:
         raise ValueError("检查元素为空")
 
-    # 校验 XPath 格式 + 剥离行尾注释（非法 XPath 传到 Appium 会产生巨量 Java 堆栈日志）
-    sanitized = []
-    for xp in xpaths:
-        if not (xp.startswith('/') or xp.startswith('(')):
-            ctx = f"预期结果【{expected_key}】（步骤{step_seq}）" if expected_key else "元素检查"
-            raise ValueError(
-                f"{ctx}D列检查元素不是有效 XPath: {xp[:80]}\n"
-                f"  请检查飞书元素表「预期结果」sheet 的 D 列，该行内容看起来是中文描述而非 XPath"
-            )
-        # 剥离行尾中文注释（如 '//xpath,描述文字' → '//xpath'）
-        # 需跳过引号内的中文（如 @text="笔记" 中的）
+    # 解析每行：格式为 '//xpath[,期望文本]'
+    # 在引号外的第一个中文或逗号之后视为期望文本
+    import re as _re
+    items = []  # [(xpath, expected_text)]
+
+    for line in raw_lines:
+        # 跳过引号内的字符，找到引号外的第一个中文/逗号
         in_quote = False
         quote_char = ''
-        cut = -1
-        for i, ch in enumerate(xp):
+        xpath_end = len(line)
+        for i, ch in enumerate(line):
             if ch in ('"', "'") and (in_quote is False or ch == quote_char):
                 in_quote = not in_quote
                 if in_quote:
@@ -226,31 +222,48 @@ def _check_elements_by_xpath(xpath_text: str, mode: str,
                 else:
                     quote_char = ''
                 continue
-            if not in_quote and '一' <= ch <= '鿿':
-                cut = i
+            if not in_quote and ('一' <= ch <= '鿿' or ch in (',', '，')):
+                xpath_end = i
                 break
-        if cut > 0:
-            before = xp[:cut].rstrip(' ,，;；')
-            if before:
-                sanitized.append(before)
-                continue
-        sanitized.append(xp)
-    xpaths = sanitized
+
+        xpath = line[:xpath_end].rstrip(' ,，;；')
+        if not (xpath.startswith('/') or xpath.startswith('(')):
+            ctx = f"预期结果【{expected_key}】（步骤{step_seq}）" if expected_key else "元素检查"
+            raise ValueError(
+                f"{ctx}D列检查元素不是有效 XPath: {xpath[:80]}\n"
+                f"  请检查飞书元素表「预期结果」sheet 的 D 列，该行内容看起来是中文描述而非 XPath"
+            )
+
+        # 提取期望文本（英文逗号后的部分），去首尾空白
+        expected_text = ""
+        if xpath_end < len(line):
+            tail = line[xpath_end:].lstrip(' ,，;；')
+            if tail:
+                expected_text = tail
+
+        items.append((xpath, expected_text))
 
     missing = []
     found = []
-    for xpath in xpaths:
+    text_mismatch = []  # [(xpath, expected, actual)]
+    for xpath, expected_text in items:
         try:
-            driver.find_element(By.XPATH, xpath)
+            el = driver.find_element(By.XPATH, xpath)
+            if expected_text:
+                actual = (el.text or "").strip()
+                if actual != expected_text:
+                    text_mismatch.append((xpath, expected_text, actual))
+                    continue  # 文本不匹配，不加入 found
             found.append(xpath)
         except NoSuchElementException:
             missing.append(xpath)
 
     ctx = f"预期结果【{expected_key}】（步骤{step_seq}）" if expected_key else "元素检查"
-    status = "通过" if ((mode == 'not_visible' and not found) or (mode == 'visible' and not missing)) else "失败"
+    has_failure = bool(missing) or bool(text_mismatch)
     if mode == 'not_visible':
-        lines = [f"{ctx}检查{status} ({len(xpaths)}个):"]
-        for xp in xpaths:
+        status = "失败" if found else "通过"
+        lines = [f"{ctx}检查{status} ({len(items)}个):"]
+        for xp, expected_text in items:
             if xp in found:
                 lines.append(f"  ↳ ✗ 仍可见: {xp}")
             else:
@@ -259,14 +272,23 @@ def _check_elements_by_xpath(xpath_text: str, mode: str,
         if found:
             raise AssertionError(lines[0])
     else:
-        lines = [f"{ctx}检查{status} ({len(found)}/{len(xpaths)}):"]
-        for xp in xpaths:
+        ok = len(found)
+        total = len(items)
+        status = "通过" if not has_failure else "失败"
+        lines = [f"{ctx}检查{status} ({ok}/{total}):"]
+        for xp, expected_text in items:
             if xp in missing:
                 lines.append(f"  ↳ ✗ 未找到: {xp}")
+            elif xp in [t[0] for t in text_mismatch]:
+                _, exp, act = next(t for t in text_mismatch if t[0] == xp)
+                lines.append(f"  ↳ ✗ 文本不符: {xp}")
+                lines.append(f"              期望: {exp!r}")
+                lines.append(f"              实际: {act!r}")
             else:
-                lines.append(f"  ↳ ✓ 存在:   {xp}")
+                detail = f"  文本: {expected_text!r}" if expected_text else ""
+                lines.append(f"  ↳ ✓ 存在:   {xp}{detail}")
         logger.info("\n".join(lines))
-        if missing:
+        if has_failure:
             raise AssertionError(lines[0])
 
 
