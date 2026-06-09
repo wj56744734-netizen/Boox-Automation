@@ -247,23 +247,27 @@ def _check_elements_by_xpath(xpath_text: str, mode: str,
             missing.append(xpath)
 
     ctx = f"预期结果【{expected_key}】（步骤{step_seq}）" if expected_key else "元素检查"
+    status = "通过" if ((mode == 'not_visible' and not found) or (mode == 'visible' and not missing)) else "失败"
     if mode == 'not_visible':
+        lines = [f"{ctx}检查{status} ({len(xpaths)}个):"]
+        for xp in xpaths:
+            if xp in found:
+                lines.append(f"  ↳ ✗ 仍可见: {xp}")
+            else:
+                lines.append(f"  ↳ ✓ 不存在: {xp}")
+        logger.info("\n".join(lines))
         if found:
-            lines = [f"{ctx}检查失败:", *(f"  ↳ ✗ 仍可见: {xp}" for xp in found)]
-            logger.info("\n".join(lines))
-            raise AssertionError(f"{ctx}预期不可见的元素仍然存在 ({len(found)}个): {found}")
-        logger.info(f"{ctx}检查通过: {len(xpaths)}个元素均不存在（不可见模式）")
+            raise AssertionError(lines[0])
     else:
+        lines = [f"{ctx}检查{status} ({len(found)}/{len(xpaths)}):"]
+        for xp in xpaths:
+            if xp in missing:
+                lines.append(f"  ↳ ✗ 未找到: {xp}")
+            else:
+                lines.append(f"  ↳ ✓ 存在:   {xp}")
+        logger.info("\n".join(lines))
         if missing:
-            lines = [f"{ctx}检查失败 ({len(missing)}/{len(xpaths)}):"]
-            for xp in xpaths:
-                if xp in missing:
-                    lines.append(f"  ↳ ✗ 未找到: {xp}")
-                else:
-                    lines.append(f"  ↳ ✓ 存在:   {xp}")
-            logger.info("\n".join(lines))
-            raise AssertionError(f"{ctx}预期可见的元素未找到 ({len(missing)}个): {missing}")
-        logger.info(f"{ctx}检查通过: {len(xpaths)}个元素均存在（可见模式）")
+            raise AssertionError(lines[0])
 
 
 _ELEMENT_LOADER_INSTANCE = None

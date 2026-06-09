@@ -443,6 +443,7 @@ def _dispatch_expected_page(method, ep) -> None:
     loader = get_element_loader()
     page_info = loader.get_expected_page(ep.expected_key)
     if not page_info:
+        logger.warning(f"预期结果【{ep.tag}】（key={ep.expected_key}）在预期结果 sheet 中未找到")
         ep.status = "skip"
         return
 
@@ -500,7 +501,11 @@ def _dispatch_expected_page(method, ep) -> None:
         return
 
     ep.status = result.status
-    logger.info(f"步骤{ep.step_seq} 预期结果 [{ep.expected_key}]:\n{result.summary()}")
+    status_cn = "通过" if result.status == "pass" else "失败"
+    logger.info(
+        f"预期结果【{ep.expected_key}】（步骤{ep.step_seq}）XML检查{status_cn} "
+        f"({result.matched_count}/{result.expected_count}):\n{result.summary()}"
+    )
     if result.status == "fail":
         raise AssertionError(result.summary())
 
