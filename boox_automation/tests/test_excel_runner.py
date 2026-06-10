@@ -502,13 +502,16 @@ def _dispatch_expected_page(method, ep) -> None:
         return
 
     ep.status = result.status
-    status_cn = "通过" if result.status == "pass" else "失败"
-    logger.info(
-        f"预期结果【{ep.expected_key}】（步骤{ep.step_seq}）XML检查{status_cn} "
-        f"({result.matched_count}/{result.expected_count}):\n{result.summary()}"
-    )
     if result.status == "fail":
+        logger.info(
+            f"预期结果【{ep.expected_key}】（步骤{ep.step_seq}）XML检查失败 "
+            f"({result.matched_count}/{result.expected_count}):\n{result.summary()}"
+        )
         raise AssertionError(result.summary())
+    logger.debug(
+        f"预期结果【{ep.expected_key}】（步骤{ep.step_seq}）XML检查通过 "
+        f"({result.matched_count}/{result.expected_count})"
+    )
 
 
 

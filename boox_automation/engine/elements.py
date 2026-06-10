@@ -276,9 +276,10 @@ def _check_elements_by_xpath(xpath_text: str, mode: str,
                 lines.append(f"  ↳ ✗ 仍可见: {xp}")
             else:
                 lines.append(f"  ↳ ✓ 不存在: {xp}")
-        logger.info("\n".join(lines))
         if found:
+            logger.info("\n".join(lines))
             raise AssertionError(lines[0])
+        logger.debug("\n".join(lines))
     else:
         ok = len(found)
         total = len(items)
@@ -295,9 +296,10 @@ def _check_elements_by_xpath(xpath_text: str, mode: str,
             else:
                 detail = f"  文本: {expected_text!r}" if expected_text else ""
                 lines.append(f"  ↳ ✓ 存在:   {xp}{detail}")
-        logger.info("\n".join(lines))
         if has_failure:
+            logger.info("\n".join(lines))
             raise AssertionError(lines[0])
+        logger.debug("\n".join(lines))
 
 
 _ELEMENT_LOADER_INSTANCE = None
