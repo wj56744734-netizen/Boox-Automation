@@ -419,6 +419,51 @@ def _check_step_expected_pages(method, expected_pages: list, step_seq: int) -> N
             raise
 
 
+def _wait_for_xml_elements(expected_xml: str, expected_key: str, step_seq: int) -> None:
+    """从预期XML提取resource-id，显式等待元素就位后再获取page_source。"""
+    import xml.etree.ElementTree as ET
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support import expected_conditions as EC
+    from selenium.webdriver.support.wait import WebDriverWait
+    from selenium.common.exceptions import TimeoutException
+    from boox_automation.core.config import timeout_default
+
+    try:
+        root = ET.fromstring(expected_xml)
+    except ET.ParseError:
+        return
+
+    resource_ids = set()
+    for elem in root.iter():
+        rid = elem.get('resource-id', '')
+        if rid and rid.strip():
+            resource_ids.add(rid.strip())
+
+    if not resource_ids:
+        return
+
+    timeout = timeout_default()
+    wait = WebDriverWait(driver, timeout)
+    missing_ids = []
+    for rid in resource_ids:
+        try:
+            wait.until(EC.presence_of_element_located((By.ID, rid)))
+        except TimeoutException:
+            missing_ids.append(rid)
+
+    if missing_ids:
+        logger.warning(
+            f"预期结果【{expected_key}】（步骤{step_seq}）"
+            f"等待XML元素超时({timeout}s)，未找到{len(missing_ids)}/{len(resource_ids)}个: "
+            f"{missing_ids[:3]}{'...' if len(missing_ids) > 3 else ''}"
+        )
+    else:
+        logger.debug(
+            f"预期结果【{expected_key}】（步骤{step_seq}）"
+            f"XML元素就位完成 ({len(resource_ids)}个)"
+        )
+
+
 def _dispatch_expected_page(method, ep) -> None:
     """执行单条预期结果校验。
 
@@ -482,6 +527,9 @@ def _dispatch_expected_page(method, ep) -> None:
         logger.warning(f"预期结果【{ep.tag}】（key={ep.expected_key}）无匹配的设备内容，跳过")
         ep.status = "skip"
         return
+
+    # 等待预期 XML 元素加载完成
+    _wait_for_xml_elements(content, ep.expected_key, ep.step_seq)
 
     # XML 签名对比
     try:
