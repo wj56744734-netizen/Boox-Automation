@@ -367,9 +367,15 @@ def note_test_initial():
         if device_region == "国内" and version_str == "4.2":
             try:
                 ensure_driver_alive(reason="启动引导检查")
-                start_buttons = driver.find_elements(By.XPATH, '//*[@text="开始使用"]')
-                if start_buttons:
-                    start_buttons[0].click()
+                from selenium.webdriver.support import expected_conditions as EC
+                from selenium.webdriver.support.wait import WebDriverWait
+                try:
+                    btn = WebDriverWait(driver, 3).until(
+                        EC.presence_of_element_located((By.XPATH, '//*[@text="开始使用"]'))
+                    )
+                    btn.click()
+                except Exception:
+                    pass  # 无启动引导按钮则跳过
             except Exception as e:
                 logging.warning(f"启动引导检查失败，跳过开始使用点击：{e}")
 

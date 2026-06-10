@@ -14,6 +14,8 @@ import logging
 from pathlib import Path
 
 from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.wait import WebDriverWait
 from appium.webdriver.common.appiumby import AppiumBy
 
 LOCATOR_TYPE_MAP = {
@@ -197,7 +199,7 @@ def _check_elements_by_xpath(xpath_text: str, mode: str,
         step_seq: 步骤序号（用于日志上下文）
     """
     from selenium.webdriver.common.by import By
-    from selenium.common.exceptions import NoSuchElementException
+    from selenium.common.exceptions import TimeoutException
     from boox_automation.driver import driver
 
     raw_lines = [line.strip() for line in xpath_text.split('\n') if line.strip()]
@@ -246,17 +248,22 @@ def _check_elements_by_xpath(xpath_text: str, mode: str,
     missing = []
     found = []
     text_mismatch = []  # [(xpath, expected, actual)]
+    from boox_automation.core.config import timeout_default
+    check_timeout = timeout_default()
+
     for xpath, expected_text in items:
         try:
-            el = driver.find_element(By.XPATH, xpath)
+            el = WebDriverWait(driver, check_timeout).until(
+                EC.presence_of_element_located((By.XPATH, xpath))
+            )
             if expected_text:
                 actual = (el.text or "").strip()
                 expected_text = expected_text.replace("\\n", "\n")
                 if actual != expected_text:
                     text_mismatch.append((xpath, expected_text, actual))
-                    continue  # 文本不匹配，不加入 found
+                    continue
             found.append(xpath)
-        except NoSuchElementException:
+        except TimeoutException:
             missing.append(xpath)
 
     ctx = f"预期结果【{expected_key}】（步骤{step_seq}）" if expected_key else "元素检查"

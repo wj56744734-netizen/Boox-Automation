@@ -223,9 +223,6 @@ def timeout_default() -> int:
     return get_int("timeout.default", 5)
 
 
-def timeout_implicit_wait() -> int:
-    return get_int("timeout.implicit_wait", 10)
-
 
 def timeout_long_press() -> int:
     return get_int("timeout.long_press", 2000)

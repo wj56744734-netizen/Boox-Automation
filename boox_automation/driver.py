@@ -104,8 +104,7 @@ def _build_driver_options():
 def init_driver(exit_on_fail=True):
     """初始化并绑定真实 driver 到代理层"""
     try:
-        from boox_automation.core.config import (
-            appium_host, appium_port, timeout_implicit_wait)
+        from boox_automation.core.config import appium_host, appium_port
 
         ensure_appium_server(auto_start=True)
         options = _build_driver_options()
@@ -114,7 +113,6 @@ def init_driver(exit_on_fail=True):
             f"http://{appium_host()}:{appium_port()}"
         )
         real_driver = webdriver.Remote(command_executor=server_url, options=options)
-        real_driver.implicitly_wait(timeout_implicit_wait())
         driver.set_driver(real_driver)
         logging.info("Driver初始化成功")
         return real_driver

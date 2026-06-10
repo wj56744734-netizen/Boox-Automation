@@ -18,17 +18,11 @@ timeout:
   # 键盘收起后等待时间
   keyboard_hide: 1        # 秒
 
-  # WebDriver 隐式等待，影响 find_element 全局行为
-  implicit_wait: 10       # 秒
-
   # 被测应用冷启动超时（从 adb shell am start 到首页可见）
   app_launch: 30          # 秒
 
   # 文件导入操作超时（大文件导入场景耗时较长）
   import_duration: 180    # 秒
-
-  # 预期结果检查前等待延时（页面元素加载缓冲）
-  expected_check_delay: 2  # 秒
 
 # ==================== 重试配置 ====================
 retry:
