@@ -223,6 +223,10 @@ def timeout_default() -> int:
     return get_int("timeout.default", 5)
 
 
+def timeout_xml_element_wait() -> int:
+    return get_int("timeout.xml_element_wait", 5)
+
+
 
 def timeout_long_press() -> int:
     return get_int("timeout.long_press", 2000)

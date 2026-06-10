@@ -9,6 +9,9 @@ timeout:
   # 元素查找默认超时，所有未显式指定 timeout 的方法共用
   default: 5              # 秒
 
+  # C列XML对比前等待预期元素就位的超时
+  xml_element_wait: 5     # 秒
+
   # 长按持续时间
   long_press: 2000        # 毫秒
 

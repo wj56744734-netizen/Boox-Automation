@@ -426,7 +426,7 @@ def _wait_for_xml_elements(expected_xml: str, expected_key: str, step_seq: int) 
     from selenium.webdriver.support import expected_conditions as EC
     from selenium.webdriver.support.wait import WebDriverWait
     from selenium.common.exceptions import TimeoutException
-    from boox_automation.core.config import timeout_default
+    from boox_automation.core.config import timeout_xml_element_wait
 
     try:
         root = ET.fromstring(expected_xml)
@@ -442,7 +442,7 @@ def _wait_for_xml_elements(expected_xml: str, expected_key: str, step_seq: int) 
     if not resource_ids:
         return
 
-    timeout = timeout_default()
+    timeout = timeout_xml_element_wait()
     wait = WebDriverWait(driver, timeout)
     missing_ids = []
     for rid in resource_ids:
