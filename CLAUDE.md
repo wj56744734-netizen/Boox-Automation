@@ -40,6 +40,21 @@ python -m boox_automation.core.cleanup
 NOTE_DESELECT_NODEIDS="test_excel_runner.py::test_case[跳过]*" pytest
 ```
 
+## 环境配置
+
+```bash
+# 安装依赖（macOS / Windows 通用）
+pip install -r requirements.txt
+
+# Windows 额外步骤：复制环境变量模板
+copy .env.example .env
+# 编辑 .env，将 PYTHONPATH 改为实际项目路径
+```
+
+**跨平台兼容**：飞书 API 调用使用 Python `requests` 库，无需安装 `curl`。Windows/Linux/macOS 开箱即用。
+
+飞书凭证（app_id/secret/token）已内置在 `config.yaml` 中，无需额外配置。仅离线模式需设置 `USE_LOCAL_EXCEL=1`。
+
 ## 项目结构
 
 项目根目录还包含 `pytest.ini`、`config.yaml` 等配置文件。
