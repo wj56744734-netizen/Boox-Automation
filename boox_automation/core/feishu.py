@@ -1,6 +1,6 @@
 """飞书 API 客户端：token 管理 + 电子表格读取 + 本地缓存。
 
-通过 curl 调用飞书 Open API，适配存在自签名证书的企业网络环境。
+通过 requests 调用飞书 Open API，跨平台兼容，无需外部命令行依赖。
 离线时自动使用本地缓存，避免因网络问题阻塞测试。
 """
 from __future__ import annotations
@@ -8,10 +8,11 @@ from __future__ import annotations
 import json
 import logging
 import os
-import subprocess
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+
+import requests
 
 from boox_automation.core.config import (
     feishu_app_id, feishu_app_secret,
@@ -25,31 +26,29 @@ _TOKEN_CACHE: dict[str, str] = {}
 _TOKEN_EXPIRY: dict[str, float] = {}
 
 
-def _curl_json(method: str, url: str, data: dict | None = None,
-               bearer_token: str | None = None) -> dict:
+def _feishu_request(method: str, url: str, data: dict | None = None,
+                    bearer_token: str | None = None) -> dict:
     timeout = feishu_curl_timeout()
-    cmd = [
-        "curl", "-s", "--max-time", str(timeout),
-        "-H", "Content-Type: application/json; charset=utf-8",
-        "-X", method,
-    ]
+    headers = {"Content-Type": "application/json; charset=utf-8"}
     if bearer_token:
-        cmd.extend(["-H", f"Authorization: Bearer {bearer_token}"])
-    if data:
-        cmd.extend(["-d", json.dumps(data, ensure_ascii=False)])
-    cmd.append(url)
+        headers["Authorization"] = f"Bearer {bearer_token}"
 
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout + 5)
-    except FileNotFoundError:
-        raise RuntimeError("curl 命令不可用，请确认已安装 curl 并加入 PATH")
-    if result.returncode != 0:
-        stderr = (result.stderr or "").strip()
-        raise RuntimeError(f"curl 请求失败: {stderr}")
-    stdout = (result.stdout or "").strip()
-    if not stdout:
-        raise RuntimeError(f"curl 返回空响应: {url}")
-    body = json.loads(stdout)
+        resp = requests.request(
+            method, url,
+            headers=headers,
+            json=data,
+            timeout=timeout,
+        )
+        resp.raise_for_status()
+    except requests.ConnectionError as e:
+        raise RuntimeError(f"无法连接飞书 API: {e}")
+    except requests.Timeout as e:
+        raise RuntimeError(f"飞书 API 请求超时: {e}")
+    except requests.RequestException as e:
+        raise RuntimeError(f"飞书 API 请求失败: {e}")
+
+    body = resp.json()
     if body.get("code") != 0:
         raise RuntimeError(
             f"飞书 API 返回错误: {url}\n"
@@ -66,7 +65,7 @@ def _get_tenant_token() -> str:
     if app_id in _TOKEN_CACHE and _TOKEN_EXPIRY.get(app_id, 0) > now:
         return _TOKEN_CACHE[app_id]
 
-    body = _curl_json(
+    body = _feishu_request(
         "POST",
         "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal",
         data={"app_id": app_id, "app_secret": app_secret},
@@ -87,7 +86,7 @@ def list_sheet_names(spreadsheet_token: str) -> list[str]:
         f"https://open.feishu.cn/open-apis/sheets/v3/spreadsheets/"
         f"{spreadsheet_token}/sheets/query"
     )
-    body = _curl_json("GET", url, bearer_token=app_token)
+    body = _feishu_request("GET", url, bearer_token=app_token)
     return [s["title"] for s in body.get("data", {}).get("sheets", [])]
 
 
@@ -108,7 +107,7 @@ def read_sheet_by_name(
         f"https://open.feishu.cn/open-apis/sheets/v3/spreadsheets/"
         f"{spreadsheet_token}/sheets/query"
     )
-    list_body = _curl_json("GET", list_url, bearer_token=app_token)
+    list_body = _feishu_request("GET", list_url, bearer_token=app_token)
     sheets = list_body.get("data", {}).get("sheets", [])
     sheet_id = None
     for s in sheets:
@@ -127,7 +126,7 @@ def read_sheet_by_name(
         f"{spreadsheet_token}/values/{sheet_id}"
         f"?valueRenderOption=ToString"
     )
-    read_body = _curl_json("GET", read_url, bearer_token=app_token)
+    read_body = _feishu_request("GET", read_url, bearer_token=app_token)
     rows = read_body.get("data", {}).get("valueRange", {}).get("values", [])
 
     if rows:
@@ -185,7 +184,7 @@ def write_sheet_values(
             "values": values,
         }
     }
-    return _curl_json("PUT", write_url, data=body, bearer_token=app_token)
+    return _feishu_request("PUT", write_url, data=body, bearer_token=app_token)
 
 
 def _col_to_letter(n: int) -> str:
@@ -204,7 +203,7 @@ def get_sheet_id(spreadsheet_token: str, sheet_name: str) -> str:
         f"{spreadsheet_token}/sheets/query"
     )
     app_token = _get_tenant_token()
-    body = _curl_json("GET", list_url, bearer_token=app_token)
+    body = _feishu_request("GET", list_url, bearer_token=app_token)
     sheets = body.get("data", {}).get("sheets", [])
     for s in sheets:
         if s.get("title") == sheet_name:
@@ -223,13 +222,9 @@ def use_local_excel() -> bool:
 # ---- 连通性检查 ----
 
 def check_feishu_reachable(timeout: int = 3) -> bool:
-    """快速检查飞书 API 是否可达（DNS + TCP 连通）。"""
+    """快速检查飞书 API 是否可达。"""
     try:
-        subprocess.run(
-            ["curl", "-s", "--max-time", str(timeout),
-             "https://open.feishu.cn"],
-            capture_output=True, text=True, timeout=timeout + 2,
-        )
+        requests.head("https://open.feishu.cn", timeout=timeout)
         return True
     except Exception:
         return False
