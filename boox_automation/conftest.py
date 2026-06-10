@@ -257,16 +257,16 @@ def note_mark_full_amount(title):
 def adb_clean_note(device_id):
     """根据设备类型清理应用数据"""
     adb_commands_reader = [
-        f"adb -s '{device_id}' shell pm clear com.onyx.android.note",    # 清理设备 笔记 数据
-        f"adb -s '{device_id}' shell pm clear com.onyx.android.ksync",     # 清理设备 ksync 数据
-        f"adb -s '{device_id}' shell pm clear com.onyx",     # 清理设备 kcb 数据
-        f"adb -s '{device_id}' shell rm -rf '/sdcard/note/*'"     # 清理设备 note 路径下文件
+        f'adb -s {device_id} shell pm clear com.onyx.android.note',
+        f'adb -s {device_id} shell pm clear com.onyx.android.ksync',
+        f'adb -s {device_id} shell pm clear com.onyx',
+        f'adb -s {device_id} shell rm -rf /sdcard/note/*',
     ]
     adb_commands_tablet = [
-        f"adb -s '{device_id}' shell pm clear com.onyx.android.note",    # 清理设备 笔记 数据
-        f"adb -s '{device_id}' shell pm clear com.onyx.android.ksync",    # 清理设备 ksync 数据
-        f"adb -s '{device_id}' shell pm clear com.onyx",    # 清理设备 kcb 数据
-        f"adb -s '{device_id}' shell rm -rf '/sdcard/note/*'"     # 清理设备 note 路径下文件
+        f'adb -s {device_id} shell pm clear com.onyx.android.note',
+        f'adb -s {device_id} shell pm clear com.onyx.android.ksync',
+        f'adb -s {device_id} shell pm clear com.onyx',
+        f'adb -s {device_id} shell rm -rf /sdcard/note/*',
     ]
     devices = Device_basic_information()
     device_info = devices.get_device_info()
