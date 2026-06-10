@@ -39,10 +39,17 @@ def _curl_json(method: str, url: str, data: dict | None = None,
         cmd.extend(["-d", json.dumps(data, ensure_ascii=False)])
     cmd.append(url)
 
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout + 5)
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout + 5)
+    except FileNotFoundError:
+        raise RuntimeError("curl 命令不可用，请确认已安装 curl 并加入 PATH")
     if result.returncode != 0:
-        raise RuntimeError(f"curl 请求失败: {result.stderr.strip()}")
-    body = json.loads(result.stdout)
+        stderr = (result.stderr or "").strip()
+        raise RuntimeError(f"curl 请求失败: {stderr}")
+    stdout = (result.stdout or "").strip()
+    if not stdout:
+        raise RuntimeError(f"curl 返回空响应: {url}")
+    body = json.loads(stdout)
     if body.get("code") != 0:
         raise RuntimeError(
             f"飞书 API 返回错误: {url}\n"

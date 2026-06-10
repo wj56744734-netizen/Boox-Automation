@@ -49,7 +49,7 @@ def load() -> dict:
         return _CONFIG
     path = _resolve_config_path()
     if path.exists():
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             _CONFIG = yaml.safe_load(f) or {}
     else:
         _CONFIG = {}
