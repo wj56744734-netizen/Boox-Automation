@@ -20,6 +20,9 @@ boox_automation/data/.cache/
 boox_automation/scripts/Note_page_contrast/temporary_image/
 boox_automation/scripts/Note_page_contrast/exception_page/
 
+# Environment (credentials)
+.env
+
 # Runtime logs
 *.log
 TEXT.txt
