@@ -127,11 +127,11 @@ def note_test_report(platform,test_scope="full"):
         # 生成 Allure 报告（无论测试成败都生成，失败时报告更关键）
         print(f"\npytest 返回码: {return_code}")
         print(f"生成 Allure 报告到目录: {_short(report_dir)}")
-        subprocess.run(f"allure generate {results_dir} -o {report_dir} -c", shell=True)
+        subprocess.run(["allure", "generate", str(results_dir), "-o", str(report_dir), "-c"])
 
         # 打开 Allure 报告
         print(f"打开 Allure 报告: {_short(report_dir)}")
-        subprocess.run(f"allure open {report_dir}", shell=True)
+        subprocess.run(["allure", "open", str(report_dir)])
 
         # 关闭驱动
         driver.quit()

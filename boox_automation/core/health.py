@@ -9,6 +9,7 @@
 
 import logging
 import os
+import shlex
 import socket
 import subprocess
 import time
@@ -45,8 +46,7 @@ def ensure_appium_server(auto_start=True, startup_timeout=None):
 
     logging.debug(f"检测到 Appium 未监听 {host}:{port}，尝试自动拉起：{appium_cmd}")
     _appium_process = subprocess.Popen(
-        appium_cmd,
-        shell=True,
+        shlex.split(appium_cmd),
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
@@ -97,8 +97,7 @@ def run_adb_command_with_retry(command, retries=None, retry_delay=None):
     last_error = ""
     for attempt in range(1, retries + 1):
         with subprocess.Popen(
-            command,
-            shell=True,
+            shlex.split(command),
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,

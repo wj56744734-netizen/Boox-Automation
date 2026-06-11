@@ -247,7 +247,7 @@ def save_cache(data: dict, cache_name: str) -> None:
         "source": "feishu",
         "data": data,
     }
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2))
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding='utf-8')
     logger.debug(f"缓存已更新: {path}")
 
 
@@ -261,7 +261,7 @@ def load_cache(cache_name: str, max_age_seconds: int | None = None) -> dict | No
         return None
 
     try:
-        payload = json.loads(path.read_text())
+        payload = json.loads(path.read_text(encoding='utf-8'))
         cached_at_str = payload.get("cached_at", "")
         if cached_at_str:
             cached_at = datetime.fromisoformat(cached_at_str)
@@ -281,7 +281,7 @@ def get_cache_age(cache_name: str) -> str:
     if not path.exists():
         return ""
     try:
-        payload = json.loads(path.read_text())
+        payload = json.loads(path.read_text(encoding='utf-8'))
         cached_at_str = payload.get("cached_at", "")
         if cached_at_str:
             cached_at = datetime.fromisoformat(cached_at_str)
