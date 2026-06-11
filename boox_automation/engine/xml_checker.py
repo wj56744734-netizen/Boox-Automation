@@ -10,23 +10,31 @@ import xml.etree.ElementTree as ET
 
 logger = logging.getLogger(__name__)
 
-# 自动忽略的属性
-_IGNORED_ATTRS = {
-    'bounds', 'index', 'instance', 'package', 'rotation',
-    'display-id', 'NAF', 'focusable', 'clickable', 'enabled',
-    'checked', 'checkable', 'scrollable', 'long-clickable',
-    'selected', 'focused', 'drawing-order',
-}
-
-# 有意义元素判定：至少有一个非空
-_MEANINGFUL_ATTRS = {'resource-id'}
+# 交互属性：元素具有任一为 true 即视为可交互
+_INTERACTIVE_ATTRS = {'clickable', 'focusable', 'scrollable', 'checkable', 'long-clickable'}
 
 
 def _is_meaningful(elem: ET.Element) -> bool:
-    for attr in _MEANINGFUL_ATTRS:
-        val = elem.get(attr, '')
-        if val and val.strip():
+    """判定元素是否值得纳入对比：有 resource-id 且（可交互 或 有可见文本）。
+
+    纯布局容器（ViewGroup/FrameLayout 等）既无交互属性也无文本，
+    会被过滤掉，从而提高跨设备/跨版本的 XML 对比稳定性。
+    """
+    rid = elem.get('resource-id', '')
+    if not rid or not rid.strip():
+        return False
+
+    # 有可见文本或内容描述 → 保留
+    text = elem.get('text', '')
+    cd = elem.get('content-desc', '')
+    if (text and text.strip()) or (cd and cd.strip()):
+        return True
+
+    # 有交互属性 → 保留
+    for attr in _INTERACTIVE_ATTRS:
+        if elem.get(attr, '').lower() == 'true':
             return True
+
     return False
 
 
@@ -185,17 +193,17 @@ class XmlChecker:
 # ---- 单元测试 ----
 if __name__ == '__main__':
     xml_a = '''<hierarchy>
-        <android.widget.FrameLayout resource-id="com.test:id/root">
+        <android.widget.FrameLayout resource-id="com.test:id/root" clickable="true">
             <android.widget.TextView resource-id="com.test:id/title" text="笔记"/>
-            <android.widget.Button resource-id="com.test:id/btn_create" text="创建"/>
-            <android.widget.ImageView resource-id="com.test:id/icon"/>
+            <android.widget.Button resource-id="com.test:id/btn_create" text="创建" clickable="true"/>
+            <android.widget.ImageView resource-id="com.test:id/icon" clickable="true"/>
         </android.widget.FrameLayout>
     </hierarchy>'''
 
     xml_b = '''<hierarchy>
-        <android.widget.FrameLayout resource-id="com.test:id/root">
+        <android.widget.FrameLayout resource-id="com.test:id/root" clickable="true">
             <android.widget.TextView resource-id="com.test:id/title" text="My Notes"/>
-            <android.widget.Button resource-id="com.test:id/btn_create" text="新建"/>
+            <android.widget.Button resource-id="com.test:id/btn_create" text="新建" clickable="true"/>
             <android.widget.TextView resource-id="com.test:id/tv_new" text="新功能"/>
         </android.widget.FrameLayout>
     </hierarchy>'''
@@ -221,10 +229,10 @@ if __name__ == '__main__':
 
     print("\n=== text 差异不影响 pass ===")
     xml_c = '''<hierarchy>
-        <android.widget.FrameLayout resource-id="com.test:id/root">
+        <android.widget.FrameLayout resource-id="com.test:id/root" clickable="true">
             <android.widget.TextView resource-id="com.test:id/title" text="新标题"/>
-            <android.widget.Button resource-id="com.test:id/btn_create" text="创建新"/>
-            <android.widget.ImageView resource-id="com.test:id/icon"/>
+            <android.widget.Button resource-id="com.test:id/btn_create" text="创建新" clickable="true"/>
+            <android.widget.ImageView resource-id="com.test:id/icon" clickable="true"/>
         </android.widget.FrameLayout>
     </hierarchy>'''
     r = XmlChecker.check(xml_a, xml_c)
@@ -232,5 +240,22 @@ if __name__ == '__main__':
     assert r.status == 'pass', f"text差异不应影响pass, got {r.status}"
     assert r.text_diff_count == 2, f"应有2个文本变更, got {r.text_diff_count}"
     print("✓ text差异不影响pass")
+
+    print("\n=== 纯容器被过滤（无text/无交互属性 → 不参与对比）===")
+    xml_with_container = '''<hierarchy>
+        <android.widget.FrameLayout resource-id="com.test:id/root" clickable="true">
+            <android.widget.ViewGroup resource-id="com.test:id/decor_content_parent">
+                <android.widget.TextView resource-id="com.test:id/title" text="笔记"/>
+            </android.widget.ViewGroup>
+            <android.widget.Button resource-id="com.test:id/btn" text="OK" clickable="true"/>
+        </android.widget.FrameLayout>
+    </hierarchy>'''
+    r = XmlChecker.check(xml_with_container, xml_with_container)
+    print(r.summary())
+    # FrameLayout(clickable) + title(text) + Button(text+clickable) = 3
+    # decor_content_parent 无text无交互属性 → 被过滤
+    assert r.expected_count == 3, f"应只保留3个有意义的元素, got {r.expected_count}"
+    assert r.status == 'pass', f"应pass, got {r.status}"
+    print("✓ 纯容器被过滤")
 
     print("\n全部测试通过 ✓")

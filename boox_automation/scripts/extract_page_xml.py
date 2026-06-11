@@ -18,20 +18,33 @@ from pathlib import Path
 # 不需要保留的属性（硬编码过滤）
 _IGNORED_ATTRS = {
     'bounds', 'index', 'instance', 'package', 'rotation',
-    'display-id', 'NAF', 'focusable', 'clickable', 'enabled',
-    'checked', 'checkable', 'scrollable', 'long-clickable',
-    'selected', 'focused', 'drawing-order',
+    'display-id', 'NAF', 'enabled',
+    'checked', 'selected', 'focused', 'drawing-order',
 }
 
-# 只保留有以下属性之一的元素
-_MEANINGFUL_ATTRS = {'resource-id'}
+# 交互属性：元素具有任一为 true 即视为可交互
+_INTERACTIVE_ATTRS = {'clickable', 'focusable', 'scrollable', 'checkable', 'long-clickable'}
 
 
 def _is_meaningful(elem: ET.Element) -> bool:
-    for attr in _MEANINGFUL_ATTRS:
-        val = elem.get(attr, '')
-        if val and val.strip():
+    """判定元素是否值得保留：有 resource-id 且（可交互 或 有可见文本）。
+
+    纯布局容器（ViewGroup/FrameLayout 等）既无交互属性也无文本，
+    会被过滤掉，只保留交互骨架用于跨设备/跨版本稳定对比。
+    """
+    rid = elem.get('resource-id', '')
+    if not rid or not rid.strip():
+        return False
+
+    text = elem.get('text', '')
+    cd = elem.get('content-desc', '')
+    if (text and text.strip()) or (cd and cd.strip()):
+        return True
+
+    for attr in _INTERACTIVE_ATTRS:
+        if elem.get(attr, '').lower() == 'true':
             return True
+
     return False
 
 

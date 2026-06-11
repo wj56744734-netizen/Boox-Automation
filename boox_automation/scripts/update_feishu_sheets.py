@@ -60,7 +60,7 @@ new_comments = [
         '  长按坐标     = 按屏幕比例坐标长按（locator 同上）',
         '• 不填自动推断: 含「toast/提示」→校验toast，其他→点击',
         '• 英文值兼容: click/input/long_press/assert_toast 仍可用',
-        '• 页面/弹窗验证统一由 K 列预期结果完成',
+        '• 页面/弹窗验证统一由 I 列预期结果完成',
     ]),
     # 5. 用途说明
     '\n'.join([

@@ -71,7 +71,7 @@ _CONDITION_KEYWORDS: dict[str, tuple[str, str]] = {
 class ParsedStep:
     seq: int
     raw: str
-    action: str  # click / assert / assert_not / assert_text / assert_toast / input / long_press / skip
+    action: str  # click / input / long_press / swipe_up / swipe_down / swipe_left / swipe_right / press_back / skip / assert_toast
     tag: str = ""  # 第一个【】= 元素标记
     element_key: str = ""  # 由 matcher 填入
     input_ref: str = ""  # 输入动作的第二个【】= 变量引用（无则为空）

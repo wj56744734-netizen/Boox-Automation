@@ -10,22 +10,10 @@ _Fingerprint_information = None
 _Version_Information = None
 
 # ===== 设备测试文件路径常量 =====
-TEST_FILES_ROOT = "/sdcard/笔记自动化测试文件"
 TEST_FILES_DISPLAY_ROOT = "笔记自动化测试文件"
-TEST_FILES_DIR_LOCAL_IMPORT = "从本地文件"
 TEST_FILES_DIR_NOTE_EXPORT = "固件迭代测试项（笔记导出）"
 TEST_FILES_DIR_NOTE_RENDER = "固件迭代测试项（笔记渲染）"
-TEST_FILES_DIR_TEST_NOTES  = "测试笔记"
 TEST_FILES_DIR_LOCAL_FILE  = "用例测试，从本地文件导入"
-TEST_FILES_DIR_NOTE_SEARCH = "笔记搜索用例文件"
-TEST_FILES_ALL_DIRS = [
-    TEST_FILES_DIR_LOCAL_IMPORT,
-    TEST_FILES_DIR_NOTE_EXPORT,
-    TEST_FILES_DIR_NOTE_RENDER,
-    TEST_FILES_DIR_TEST_NOTES,
-    TEST_FILES_DIR_LOCAL_FILE,
-    TEST_FILES_DIR_NOTE_SEARCH,
-]
 
 class Device_basic_information:
 
@@ -213,10 +201,6 @@ class Device_basic_information:
             )
         logging.info(f"语言检查: {locale} ✓")
         return locale
-
-    def check_test_files(self, device_id):
-        """检查设备上是否存在测试文件目录（已禁用，始终返回 True）"""
-        return True
 
     def get_device_memory_info(self,device_id):
         """"" 获取设备内存信息 """""

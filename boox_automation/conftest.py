@@ -11,7 +11,6 @@ from boox_automation.ui_ops.operations import Operation_method
 from boox_automation.devices.info import Device_basic_information
 from boox_automation.driver import driver, ensure_driver_alive
 from boox_automation.core.health import ensure_adb_device_ready, run_adb_command_with_retry
-import allure
 import pytest
 import time
 from selenium.webdriver.common.by import By
@@ -80,11 +79,7 @@ def pytest_addoption(parser):
 
 def pytest_configure(config):
     """注册测试标记并配置日志"""
-    config.addinivalue_line("markers", "abroad: 海外设备相关的测试用例")
-    config.addinivalue_line("markers", "china: 国内设备相关的测试用例")
     config.addinivalue_line("markers", "test: 测试用例")
-    config.addinivalue_line("markers", "increment: 增量测试用例")
-    config.addinivalue_line("markers", "full_amount: 全量测试用例")
 
     # 配置日志级别（由 pytest.ini 的 log_cli 统一管理输出）
     root_logger = logging.getLogger()
@@ -187,9 +182,6 @@ def pytest_sessionstart(session):
         if device_info is None:
             raise RuntimeError("设备型号未注册，请检查 devices/registry.py 中的 device_list 映射表")
 
-        # 已禁用：不再强制要求设备预置测试文件目录
-        # devices.check_test_files(device_id)
-
         logging.info("-" * 60)
     except RuntimeError as e:
         pytest.exit(
@@ -206,53 +198,6 @@ def pytest_sessionfinish(session, exitstatus):
     except Exception as e:
         logging.warning(f"自动清理产物失败: {e}")
 
-
-# --------------------- 测试标记装饰器 ---------------------
-def note_mark_china(title):
-    """历史兼容：通用用例（同时打 china + abroad）"""
-
-    def decorator(func):
-        func = pytest.mark.abroad(func)
-        func = pytest.mark.china(func)
-        func = allure.title(title)(func)
-        func = allure.step(title)(func)
-        return func
-
-    return decorator
-
-def note_mark_abroad(title):
-    """历史兼容：国内专属用例（名称保留，不改调用侧）"""
-
-    def decorator(func):
-        func = pytest.mark.china(func)
-        func = allure.title(title)(func)
-        func = allure.step(title)(func)
-        return func
-
-    return decorator
-
-def note_mark_increment(title):
-    """海外设备测试用例标记装饰器"""
-
-    def decorator(func):
-        func = pytest.mark.increment(func)
-        func = pytest.mark.full_amount(func)
-        func = allure.title(title)(func)
-        func = allure.step(title)(func)
-        return func
-
-    return decorator
-
-def note_mark_full_amount(title):
-    """海外设备测试用例标记装饰器"""
-
-    def decorator(func):
-        func = pytest.mark.full_amount(func)
-        func = allure.title(title)(func)
-        func = allure.step(title)(func)
-        return func
-
-    return decorator
 
 def adb_clean_note(device_id):
     """根据设备类型清理应用数据"""
@@ -370,7 +315,7 @@ def note_test_initial():
                 from selenium.webdriver.support import expected_conditions as EC
                 from selenium.webdriver.support.wait import WebDriverWait
                 try:
-                    btn = WebDriverWait(driver, 3).until(
+                    btn = WebDriverWait(driver, 5).until(
                         EC.presence_of_element_located((By.XPATH, '//*[@text="开始使用"]'))
                     )
                     btn.click()
@@ -378,14 +323,6 @@ def note_test_initial():
                     pass  # 无启动引导按钮则跳过
             except Exception as e:
                 logging.warning(f"启动引导检查失败，跳过开始使用点击：{e}")
-
-        if method.xpath_text_click("笔记",should_click=False):
-            logging.debug("笔记应用启动成功")
-            break
-        logging.info("正在加载应用...")
-        time.sleep(2)
-    else:
-        pytest.fail("笔记应用启动超时")
 
     yield  # 测试执行点
 

@@ -10,10 +10,10 @@ from boox_automation.engine.parser import ParsedCase
 
 logger = logging.getLogger(__name__)
 
-from boox_automation.core.config import excel_result_column, excel_remark_column
+from boox_automation.core.config import case_column
 
-COL_RESULT = excel_result_column()
-COL_REMARK = excel_remark_column()
+COL_RESULT = case_column("result")
+COL_REMARK = case_column("remark")
 
 
 class ExcelReporter:

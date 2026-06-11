@@ -176,12 +176,9 @@ def test_modules() -> list[str]:
     return []
 
 
-def excel_result_column() -> int:
-    return get_int("excel.result_column", 12)
-
-
-def excel_remark_column() -> int:
-    return get_int("excel.remark_column", 13)
+def case_column(name: str) -> int:
+    """读取用例表列索引（0-based）。name 如 title/priority/module/precondition/steps/expected/result/remark。"""
+    return get_int(f"excel.columns.{name}", -1)
 
 
 def appium_host() -> str:

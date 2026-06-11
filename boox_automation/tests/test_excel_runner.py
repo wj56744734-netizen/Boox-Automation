@@ -27,11 +27,11 @@ from boox_automation.engine.elements import ElementMatcher, _DEVICE_ACTIONS
 logger = logging.getLogger(__name__)
 
 # ============================================================
-from boox_automation.core.config import excel_priority_filter, excel_test_case_file, test_modules as cfg_test_modules
+from boox_automation.core.config import excel_priority_filter, excel_test_case_file, test_modules as cfg_test_modules, case_column
 
 EXCEL_FILE = str(Path(__file__).resolve().parent.parent / "data" / excel_test_case_file())
 PRIORITY_FILTER = excel_priority_filter()
-_PRIORITY_ORDER = {"P0": 0, "P1": 1, "P2": 2}
+_PRIORITY_ORDER = {"P0": 0, "P1": 1, "P2": 2, "TEST": 3}
 # ============================================================
 
 
@@ -62,12 +62,12 @@ def _parse_case_rows(rows: list[list[str]], priority_spec: str) -> list[ParsedCa
         # 安全取列值（补空字符串）
         def _col(c): return row[c] if c < len(row) else ""
 
-        title = _col(6)        # G 列 (0-based: 6)
-        steps_text = _col(9)   # J 列
-        priority = _col(7)     # H 列
-        module = _col(3)       # D 列
-        precondition_text = _col(8)  # I 列
-        expected_text = _col(10)     # K 列
+        title = _col(case_column("title"))             # E 列
+        steps_text = _col(case_column("steps"))       # H 列
+        priority = _col(case_column("priority"))      # F 列
+        module = _col(case_column("module"))          # C 列
+        precondition_text = _col(case_column("precondition"))  # G 列
+        expected_text = _col(case_column("expected")) # I 列
 
         if not title or not steps_text:
             continue
@@ -137,6 +137,8 @@ def _parse_case_rows(rows: list[list[str]], priority_spec: str) -> list[ParsedCa
         cases = [c for c in cases if c.priority in ("P1", "P2")]
     elif spec == "P2":
         cases = [c for c in cases if c.priority == "P2"]
+    elif spec == "TEST":
+        cases = [c for c in cases if c.priority.upper() == "TEST"]
 
     # 模块筛选
     modules_filter = cfg_test_modules()
@@ -433,10 +435,12 @@ def _wait_for_xml_elements(expected_xml: str, expected_key: str, step_seq: int) 
     except ET.ParseError:
         return
 
+    from boox_automation.engine.xml_checker import _is_meaningful
+
     resource_ids = set()
     for elem in root.iter():
         rid = elem.get('resource-id', '')
-        if rid and rid.strip():
+        if rid and rid.strip() and _is_meaningful(elem):
             resource_ids.add(rid.strip())
 
     if not resource_ids:

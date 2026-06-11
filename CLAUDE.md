@@ -152,7 +152,7 @@ from boox_automation.core.config import timeout_default, retry_max_attempts
 | `retry` | max_attempts, delay, element_click, stale_element_delay |
 | `appium` | host, port, startup_timeout, capabilities |
 | `adb` | device_ready_retries, command_retries 及对应 delay |
-| `excel` | test_case_sheet, priority_filter, test_case_file, elements_file, 回写列 |
+| `excel` | test_case_sheet, priority_filter, test_case_file, elements_file, columns（列索引） |
 | `feishu` | app_id/secret, test_case_token, elements_token, test_case_sheets, element_sheet_prefix, curl_timeout |
 | `logcat` | capture_timeout |
 | `screenshot` | dir, prefix, enabled |
@@ -171,7 +171,7 @@ from boox_automation.core.config import timeout_default, retry_max_attempts
 | `APPIUM_START_CMD` | 自动拉起 Appium 的命令 |
 | `NOTE_DEVICE_ID` | 多设备时显式指定目标设备 |
 | `NOTE_DESELECT_NODEIDS` | 跳过指定用例 |
-| `NOTE_TEST_MODULES` | 逗号分隔，筛选 D 列模块 |
+| `NOTE_TEST_MODULES` | 逗号分隔，筛选 C 列模块 |
 | `NOTE_ARTIFACTS_ROOT` | 产物根目录 |
 | `NOTE_ARTIFACTS_KEEP_LATEST` | 每类产物保留轮数 |
 | `USE_LOCAL_EXCEL` | `1`=使用本地 xlsx，默认从飞书加载 |
@@ -218,9 +218,9 @@ from boox_automation.core.config import timeout_default, retry_max_attempts
 | `长按坐标` | 按屏幕比例坐标长按 | `x,y` 如 `0.5,0.3` |
 | `滑动` | 按屏幕比例坐标滑动 | `x1,y1,x2,y2` 如 `0.7,0.5,0.3,0.5` |
 
-`assert`/`assert_not`/`assert_text`/`dismiss` — **已废弃**，页面/弹窗验证统一由 K 列预期结果完成。
+`assert`/`assert_not`/`assert_text`/`dismiss` — **已废弃**，页面/弹窗验证统一由 I 列预期结果完成。
 
-**步骤关键词 → 动作映射（用例 J 列）：**
+**步骤关键词 → 动作映射（用例 H 列）：**
 
 | 步骤关键词 | 动作 | 需 `【】` 元素匹配 |
 |---|---|---|
@@ -232,7 +232,7 @@ from boox_automation.core.config import timeout_default, retry_max_attempts
 | 滑动 | `滑动` | 是，locator 为 `x1,y1,x2,y2` |
 | 上滑/向上滑动/下滑/向下滑动/左滑/向左滑动/右滑/向右滑动 | 方向滑动 | **否**，纯关键词触发 |
 | 按返回键/返回键 | 系统返回键 | **否**，纯关键词触发 |
-| 检查/查看/校验（步骤开头） | 跳过 | —，K 列预期结果接管 |
+| 检查/查看/校验（步骤开头） | 跳过 | —，I 列预期结果接管 |
 
 方向滑动和返回键是设备级硬编码操作，直接写关键词即可，**不要加 `【】`**。例如 `向下滑动`、`按返回键`。
 
@@ -256,13 +256,13 @@ from boox_automation.core.config import timeout_default, retry_max_attempts
 
 ## 预期结果规范
 
-J/K 列职责分离：**J 列只做操作，K 列只做断言**。页面/弹窗验证统一在 K 列通过预期结果完成。
+H/I 列职责分离：**H 列只做操作，I 列只做断言**。页面/弹窗验证统一在 I 列通过预期结果完成。
 
-用例 K 列格式：`步骤{N}：【{预期结果匹配文本}】` + 可选后缀。不含 `【】` 的行视为文档描述跳过，K 列为空不检查（兼容老用例）。
+用例 I 列格式：`步骤{N}：【{预期结果匹配文本}】` + 可选后缀。不含 `【】` 的行视为文档描述跳过，I 列为空不检查（兼容老用例）。
 
 **五种模式（行尾后缀区分）：**
 
-| K 列格式 | check_mode | 执行逻辑 | 需预期结果 sheet |
+| I 列格式 | check_mode | 执行逻辑 | 需预期结果 sheet |
 |---|---|---|---|
 | `步骤{N}：【{key}】` | visible | C列XML对比 或 D列XPath检查（预期存在） | 是 |
 | `步骤{N}：【{key}】不可见` | not_visible | C列XML对比 或 D列XPath检查（预期不存在） | 是 |
@@ -275,7 +275,7 @@ J/K 列职责分离：**J 列只做操作，K 列只做断言**。页面/弹窗�
 | 列 | 中文名 | 说明 | 必填 |
 |---|---|---|---|
 | A | 元素标识 | 唯一 key，格式 `页面.页面状态` | ✓ |
-| B | 匹配文本 | K 列 `【】` 通过此列关联 | ✓ |
+| B | 匹配文本 | I 列 `【】` 通过此列关联 | ✓ |
 | C | 页面XML | 从 Appium Inspector 导出，支持多设备「键：」分块 | C/D 二选一 |
 | D | 检查元素 | XPath 选择器，每行一个，支持多设备「键：」分块 | C/D 二选一 |
 | E | 用途说明 | 人类可读描述（不影响执行） | |
@@ -343,7 +343,7 @@ J/K 列职责分离：**J 列只做操作，K 列只做断言**。页面/弹窗�
 
 **执行逻辑**：
 
-| K 列模式 | D 列检查逻辑 |
+| I 列模式 | D 列检查逻辑 |
 |---|---|
 | `visible`（默认） | 所有 XPath 都能找到 → pass；未找到或文本不匹配 → fail |
 | `not_visible` / `不存在` / `不可见` | 所有 XPath 都找不到 → pass，任一找到 → fail |
@@ -353,8 +353,8 @@ J/K 列职责分离：**J 列只做操作，K 列只做断言**。页面/弹窗�
 ### 弹窗验证方式
 
 ```
-J 列: click【关闭按钮】              → 普通点击关闭
-K 列: 步骤N：【弹窗内容】            → XML 对比或 XPath 检查（弹窗存在时）
+H 列: click【关闭按钮】              → 普通点击关闭
+I 列: 步骤N：【弹窗内容】            → XML 对比或 XPath 检查（弹窗存在时）
      步骤N+1：【关闭后页面状态】      → XML 对比或 XPath 检查（弹窗消失后）
 ```
 
@@ -434,7 +434,7 @@ for s_name, sheet in sheets.items():
 | XPath 语法错误 | 报错信息含 `InvalidSelectorException` 或 `XPath` 相关错误 | 检查元素表 locator 中每个 XPath 是否以 `//` 开头 |
 | 元素不可点击 | `check_timeout` / `xpath_element_is_clickable` 失败，Inspector 可见 | `check_timeout` 用 `EC.element_to_be_clickable`，纯展示文本（TextView label）可能只可见不可点击 |
 | 元素确实不存在 | 截图 + Inspector 都找不到该元素 | UI 变更，更新元素表 locator 或多设备块 |
-| 弹窗/引导已关闭 | 非首次进入，引导不再弹出 | 用前置条件跳过或用 K 列 not_visible 模式验证 |
+| 弹窗/引导已关闭 | 非首次进入，引导不再弹出 | 用前置条件跳过或用 I 列 not_visible 模式验证 |
 | 级联失败 | 调用链中有多个不同函数，后有 quit/back 不可点击 | 往前找第一个 ERROR，修复后级联自动消失 |
 
 ### 常见根因速查
@@ -444,7 +444,7 @@ for s_name, sheet in sheets.items():
 | 国内 pass、海外 fail | 缺少海外版多设备块 | locator 列加 `海外：` 块 |
 | 某设备型号专属 | 缺少设备适配块 | locator 列加对应键的块 |
 | XML 对比失败 | 预期 XML 过期或页面变更 | 重新用 extract_page_xml.py 提取 |
-| K 列 toast 不生效 | 忘记加 `toast提示` 后缀 | 检查 K 列格式 |
+| I 列 toast 不生效 | 忘记加 `toast提示` 后缀 | 检查 I 列格式 |
 | Driver/Appium 报错 | session 断开 | 重启 Appium，检查设备连接 |
 
 ### 改后验证

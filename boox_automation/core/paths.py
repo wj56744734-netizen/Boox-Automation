@@ -68,10 +68,6 @@ def safe_screenshot_path(name: str) -> Path:
     return screenshot_dir_today() / f"{ts}_{safe}.png"
 
 
-def tmp_path(name: str) -> Path:
-    """tmp 目录下生成一个可写入的文件路径。"""
-    ensure_dir(TMP_ROOT)
-    return TMP_ROOT / name
 
 
 __all__ = [
@@ -88,5 +84,4 @@ __all__ = [
     "new_allure_html_dir",
     "screenshot_dir_today",
     "safe_screenshot_path",
-    "tmp_path",
 ]

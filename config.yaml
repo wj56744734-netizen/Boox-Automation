@@ -73,10 +73,10 @@ excel:
   # 用例 Sheet 名（本地和飞书共用）
   test_case_sheet: "笔记"
 
-  # 优先级筛选：P0=仅P0  P1=P1+P2  P2=仅P2  空=全部
-  priority_filter: "P0"
+  # 优先级筛选：P0=仅P0  P1=P1+P2  P2=仅P2  test=仅test  空=全部
+  priority_filter: "test"
 
-  # 模块筛选：逗号分隔，仅运行 D 列匹配的模块。空=全部
+  # 模块筛选：逗号分隔，仅运行 C 列匹配的模块。空=全部
   # 环境变量 NOTE_TEST_MODULES 可覆盖（逗号分隔）
   test_modules: ""
 
@@ -87,9 +87,16 @@ excel:
   # 本地元素文件名（仅 USE_LOCAL_EXCEL=1 时生效）
   elements_file: "elements.xlsx"
 
-  # 结果回写列（0-based，12=M 列，13=N 列）
-  result_column: 12
-  remark_column: 13
+  # 用例表列索引（0-based）
+  columns:
+    title: 4          # E  标题
+    priority: 5       # F  优先级
+    module: 2         # C  所属模块
+    precondition: 6   # G  前置条件
+    steps: 7          # H  操作步骤
+    expected: 8       # I  预期结果
+    result: 9         # J  测试结果
+    remark: 11        # L  测试备注
 
 # ==================== 飞书配置 ====================
 feishu:
