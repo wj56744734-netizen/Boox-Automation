@@ -371,16 +371,15 @@ def validate_case(case: ParsedCase) -> str | None:
 
 # ---- 预期结果解析 ----
 
-_EXPECTED_PAGE_RE = re.compile(
-    r'^步骤\s*(\d+)\s*[:：\.]\s*【(.+?)】'
-)
-
 
 def parse_expected_results(raw_text: str | None) -> list[ExpectedPageRef]:
-    """解析预期结果列，每行格式: 步骤{N}：【{预期结果匹配文本}】
+    """解析预期结果列。
 
+    格式: 每行包含【预期结果匹配文本】，位置不限。
     不含【】的行视为文档描述，跳过。
-    K 列为空 → 返回空列表（兼容老用例）。
+    I 列为空 → 返回空列表（兼容老用例）。
+
+    step_seq 在执行时通过 tag 匹配到 H 列的检查步骤后回填。
     """
     if not raw_text:
         return []
@@ -393,15 +392,13 @@ def parse_expected_results(raw_text: str | None) -> list[ExpectedPageRef]:
     results = []
 
     for line in lines:
-        match = _EXPECTED_PAGE_RE.search(line)
-        if not match:
-            continue  # 不含期望格式的行视为描述，跳过
+        tags = _TAG_RE.findall(line)
+        if not tags:
+            continue  # 不含【】的行视为描述，跳过
 
-        step_seq = int(match.group(1))
-        tag = match.group(2).strip()
-
+        tag = tags[0].strip()
         results.append(ExpectedPageRef(
-            step_seq=step_seq,
+            step_seq=0,  # 占位，执行时按 tag 匹配后回填
             tag=tag,
             raw=line,
         ))

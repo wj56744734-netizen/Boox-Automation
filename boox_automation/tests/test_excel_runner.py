@@ -19,7 +19,7 @@ from boox_automation.ui_ops.operations import (
 from boox_automation.tests.helpers import Public_method
 from boox_automation.engine.parser import (
     parse_steps, parse_preconditions, parse_expected_results,
-    ParsedCase, check_conditions, validate_case,
+    ParsedCase, ExpectedPageRef, check_conditions, validate_case,
 )
 from boox_automation.engine.elements import ElementMatcher, _DEVICE_ACTIONS
 
@@ -99,31 +99,25 @@ def _parse_case_rows(rows: list[list[str]], priority_spec: str) -> list[ParsedCa
 
         for ep in case.expected_pages:
             if ep.tag:
-                raw_tag = ep.tag
-                # toast 模式: tag 含 toast提示/toast不出现 后缀
-                if 'toast提示' in raw_tag:
+                raw_line = ep.raw
+                # toast 模式: 整行含 toast提示/toast不出现 后缀
+                if 'toast提示' in raw_line:
                     ep.check_mode = 'toast'
-                    ep.expected_text = raw_tag.replace('toast提示', '').strip()
-                elif 'toast不出现' in raw_tag:
+                    ep.expected_text = ep.tag  # 【】内即期望 toast 文本
+                elif 'toast不出现' in raw_line:
                     ep.check_mode = 'toast_not'
-                    ep.expected_text = raw_tag.replace('toast不出现', '').strip()
-                # 不可见模式
-                elif '不可见' in raw_tag:
+                    ep.expected_text = ep.tag
+                elif '不可见' in raw_line or '不存在' in raw_line:
                     ep.check_mode = 'not_visible'
-                    ep.tag = raw_tag.replace('不可见', '').strip()
-                elif '不存在' in raw_tag:
-                    ep.check_mode = 'not_visible'
-                    ep.tag = raw_tag.replace('不存在', '').strip()
                 else:
                     ep.check_mode = 'visible'
-                    ep.tag = raw_tag
 
                 # visible/not_visible → 查预期结果 sheet
                 if ep.check_mode in ('visible', 'not_visible'):
                     ep.expected_key = _loader.match_expected_result(ep.tag)
                     if not ep.expected_key:
                         logger.warning(f"R{row1} 预期结果【{ep.tag}】未在预期结果 sheet 中匹配")
-                # toast: tag 即期望文本，不查 sheet
+                # toast: 直接使用 tag 作为预期文本，不查 sheet
                 else:
                     ep.expected_key = '__toast__'
 
@@ -311,16 +305,22 @@ class TestExcelRunner:
                 s.status = "skip"
             pytest.skip(validation_skip)
 
-        # K 列为空 → WARNING
+        # I 列为空 → WARNING
         if not case.expected_pages:
             logger.warning(f"R{case.row_number} [{case.title}] 无预期结果，缺少断言")
 
-        # 过滤无 element_key 的步骤（设备级 action / skip 除外，需保留以触发 K 列预期结果）
+        # 过滤无 element_key 的步骤（设备级 action / skip 除外）
         for s in case.steps:
             if not s.element_key and s.action not in _DEVICE_ACTIONS and s.action != "skip":
                 s.status = "skip"
         steps = [s for s in case.steps
                  if s.element_key or s.action in _DEVICE_ACTIONS or s.action == "skip"]
+
+        # 构建 tag → 预期结果索引（支持同名 tag 多次出现时按序匹配）
+        expected_by_tag: dict[str, list[ExpectedPageRef]] = {}
+        for ep in case.expected_pages:
+            expected_by_tag.setdefault(ep.tag, []).append(ep)
+        expected_consumed: dict[str, int] = {}
 
         try:
             with allure.step(case_id):
@@ -330,11 +330,22 @@ class TestExcelRunner:
                     _dispatch_step(self.method, self.public, step, case.variables)
                     step.status = "pass"
                     clear_step_context()
-                    _check_step_expected_pages(
-                        self.method, case.expected_pages, step.seq)
+                    # 检查步骤 → 按 tag 关联到预期结果
+                    if step.action == "skip" and step.tag:
+                        _check_expected_by_tag(
+                            self.method, expected_by_tag, expected_consumed, step)
 
-                _check_step_expected_pages(
-                    self.method, case.expected_pages, 0)
+                # 最终检查：I 列未消费的预期结果（DEBUG，仅调试时可见）
+                unconsumed = []
+                for tag, entries in expected_by_tag.items():
+                    used = expected_consumed.get(tag, 0)
+                    for i in range(used, len(entries)):
+                        unconsumed.append(entries[i].raw)
+                if unconsumed:
+                    logger.debug(
+                        f"R{case.row_number} 预期结果中以下行未匹配到检查步骤:\n" +
+                        "\n".join(f"  ↳ {u}" for u in unconsumed)
+                    )
         except Exception:
             for s in steps:
                 if not s.status:
@@ -405,20 +416,41 @@ def _dispatch_step(method, public, step, variables: dict[str, str] | None = None
         logging.warning(f"步骤{step.seq}: 【{step.tag}】未知动作类型: {step.action}")
 
 
-def _check_step_expected_pages(method, expected_pages: list, step_seq: int) -> None:
-    """检查指定步骤的所有预期结果（step_seq=0 为最终检查）。"""
-    for ep in expected_pages:
-        if ep.step_seq != step_seq:
-            continue
-        if not ep.expected_key:
-            ep.status = "skip"
-            continue
-        try:
-            _dispatch_expected_page(method, ep)
-            ep.status = "pass"
-        except Exception:
-            ep.status = "fail"
-            raise
+def _check_expected_by_tag(method, expected_by_tag: dict, consumed: dict, step) -> None:
+    """按 tag 匹配预期结果并执行检查。
+
+    检查步骤（action=skip）通过 tag 与 I 列预期结果关联，不再依赖步骤号。
+    同名 tag 按出现顺序一一对应（第一次出现的 检查【X】→ 第一个 I 列【X】）。
+    """
+    tag = step.tag
+    entries = expected_by_tag.get(tag, [])
+
+    if not entries:
+        raise AssertionError(
+            f"步骤{step.seq}：检查【{tag}】未在预期结果列找到匹配【】"
+        )
+
+    idx = consumed.get(tag, 0)
+    if idx >= len(entries):
+        raise AssertionError(
+            f"步骤{step.seq}：检查【{tag}】的预期结果已用完（I列仅{len(entries)}条同名匹配），"
+            f"请检查是否多写了检查步骤"
+        )
+
+    ep = entries[idx]
+    ep.step_seq = step.seq  # 回填步骤号（用于日志/报错）
+    consumed[tag] = idx + 1
+
+    if not ep.expected_key:
+        ep.status = "skip"
+        return
+
+    try:
+        _dispatch_expected_page(method, ep)
+        ep.status = "pass"
+    except Exception:
+        ep.status = "fail"
+        raise
 
 
 def _wait_for_xml_elements(expected_xml: str, expected_key: str, step_seq: int) -> None:

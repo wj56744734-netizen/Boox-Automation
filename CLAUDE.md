@@ -258,17 +258,21 @@ from boox_automation.core.config import timeout_default, retry_max_attempts
 
 H/I 列职责分离：**H 列只做操作，I 列只做断言**。页面/弹窗验证统一在 I 列通过预期结果完成。
 
-用例 I 列格式：`步骤{N}：【{预期结果匹配文本}】` + 可选后缀。不含 `【】` 的行视为文档描述跳过，I 列为空不检查（兼容老用例）。
+用例 I 列格式：包含 `【预期结果匹配文本】` 即可，位置不限。不含 `【】` 的行视为文档描述跳过，I 列为空不检查（兼容老用例）。
+
+关联方式：执行时 H 列 `检查【X】` 自动去 I 列找包含 `【X】` 的行，按出现顺序一一对应。
+H 列 `检查【X】` 在 I 列找不到匹配 → 报错终止该条用例。
+I 列的 `【X】` 在 H 列没有对应 `检查` → WARNING 提示，不阻断。
 
 **五种模式（行尾后缀区分）：**
 
 | I 列格式 | check_mode | 执行逻辑 | 需预期结果 sheet |
 |---|---|---|---|
-| `步骤{N}：【{key}】` | visible | C列XML对比 或 D列XPath检查（预期存在） | 是 |
-| `步骤{N}：【{key}】不可见` | not_visible | C列XML对比 或 D列XPath检查（预期不存在） | 是 |
-| `步骤{N}：【{key}】不存在` | not_visible | 同上 | 是 |
-| `步骤{N}：【{text}】toast提示` | toast | `wait_check_toast(toast_true=)` | 否 |
-| `步骤{N}：【{text}】toast不出现` | toast_not | `wait_check_toast(toast_false=)` | 否 |
+| `【{key}】` | visible | C列XML对比 或 D列XPath检查（预期存在） | 是 |
+| `【{key}】不可见` | not_visible | C列XML对比 或 D列XPath检查（预期不存在） | 是 |
+| `【{key}】不存在` | not_visible | 同上 | 是 |
+| `【{text}】toast提示` | toast | `wait_check_toast(toast_true=)` | 否 |
+| `【{text}】toast不出现` | toast_not | `wait_check_toast(toast_false=)` | 否 |
 
 ### 预期结果 Sheet（飞书元素表中 `预期结果` sheet，5 列 A-E）
 
@@ -354,8 +358,8 @@ H/I 列职责分离：**H 列只做操作，I 列只做断言**。页面/弹窗�
 
 ```
 H 列: click【关闭按钮】              → 普通点击关闭
-I 列: 步骤N：【弹窗内容】            → XML 对比或 XPath 检查（弹窗存在时）
-     步骤N+1：【关闭后页面状态】      → XML 对比或 XPath 检查（弹窗消失后）
+I 列: 【弹窗内容】                   → XML 对比或 XPath 检查（弹窗存在时）
+     【关闭后页面状态】               → XML 对比或 XPath 检查（弹窗消失后）
 ```
 
 关闭按钮作为普通元素定义在元素表中（action=click），弹窗存在/消失状态各对应一条预期结果。
