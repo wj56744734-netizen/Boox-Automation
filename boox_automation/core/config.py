@@ -119,17 +119,15 @@ def feishu_elements_token() -> str:
     )
 
 
-def feishu_test_case_sheets() -> list[str]:
+def test_case_sheets() -> list[str]:
     """返回要加载的用例 sheet 列表，支持环境变量逗号分隔。"""
-    env = os.environ.get("FEISHU_TEST_CASE_SHEETS")
+    env = os.environ.get("NOTE_TEST_CASE_SHEETS")
     if env:
         return [s.strip() for s in env.split(",") if s.strip()]
-    sheets = get("feishu.test_case_sheets")
+    sheets = get("excel.test_case_sheets")
     if isinstance(sheets, list):
         return sheets
-    # 兼容旧配置 test_case_sheet（单值）
-    old = get_str("feishu.test_case_sheet")
-    return [old] if old else ["笔记"]
+    return ["笔记"]
 
 
 def feishu_element_sheet_prefix() -> str:
@@ -143,10 +141,6 @@ def feishu_curl_timeout() -> int:
 
 def feishu_token_cache_ttl() -> int:
     return get_int("feishu.token_cache_ttl", 5400)
-
-
-def excel_test_case_sheet() -> str:
-    return get_str("excel.test_case_sheet", "笔记")
 
 
 def excel_priority_filter() -> str:

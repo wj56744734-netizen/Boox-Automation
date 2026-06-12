@@ -277,8 +277,8 @@ def _make_case_id(case: ParsedCase) -> str:
 
 
 # 模块加载时解析 Excel，生成 parametrize 参数
-from boox_automation.core.config import feishu_test_case_sheets
-_all_cases = _load_cases(EXCEL_FILE, feishu_test_case_sheets(), PRIORITY_FILTER)
+from boox_automation.core.config import test_case_sheets
+_all_cases = _load_cases(EXCEL_FILE, test_case_sheets(), PRIORITY_FILTER)
 _executable = [c for c in _all_cases if any(s.element_key for s in c.steps)]
 _executable.sort(key=lambda c: (_PRIORITY_ORDER.get(c.priority, 99), c.row_number))
 

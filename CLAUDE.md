@@ -177,7 +177,7 @@ from boox_automation.core.config import timeout_default, retry_max_attempts
 | `USE_LOCAL_EXCEL` | `1`=使用本地 xlsx，默认从飞书加载 |
 | `FEISHU_APP_ID` / `FEISHU_APP_SECRET` | 覆盖飞书应用凭证 |
 | `FEISHU_TEST_CASE_TOKEN` / `FEISHU_ELEMENTS_TOKEN` | 覆盖表格 token |
-| `FEISHU_TEST_CASE_SHEETS` | 覆盖用例 sheet 列表（逗号分隔） |
+| `NOTE_TEST_CASE_SHEETS` | 覆盖用例 sheet 列表（逗号分隔） |
 | `FEISHU_ELEMENT_SHEET_PREFIX` | 覆盖元素 sheet 前缀筛选 |
 
 ## 开发约定
