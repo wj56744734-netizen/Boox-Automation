@@ -144,7 +144,7 @@ from boox_automation.core.config import timeout_default, retry_max_attempts
 
 | 分组 | 主要配置项 |
 |---|---|
-| `timeout` | default, implicit_wait, long_press, swipe, app_launch, import_duration |
+| `timeout` | default, xml_element_wait, app_launch |
 | `retry` | max_attempts, delay, element_click, stale_element_delay |
 | `appium` | host, port, startup_timeout, capabilities |
 | `adb` | device_ready_retries, command_retries 及对应 delay |

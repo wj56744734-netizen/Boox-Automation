@@ -12,20 +12,8 @@ timeout:
   # C列XML对比前等待预期元素就位的超时
   xml_element_wait: 5     # 秒
 
-  # 长按持续时间
-  long_press: 2000        # 毫秒
-
-  # 屏幕滑动持续时间
-  swipe: 300              # 毫秒
-
-  # 键盘收起后等待时间
-  keyboard_hide: 1        # 秒
-
   # 被测应用冷启动超时（从 adb shell am start 到首页可见）
   app_launch: 30          # 秒
-
-  # 文件导入操作超时（大文件导入场景耗时较长）
-  import_duration: 180    # 秒
 
 # ==================== 重试配置 ====================
 retry:

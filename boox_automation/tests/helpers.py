@@ -342,6 +342,7 @@ class Public_method:
             else:
                 self.method.xpath_parent_click(
                     xpath='(//android.widget.ImageView[@resource-id="com.onyx:id/imageView_cover_border"])[15]')
+
     def restore_notes(self, file_route_name, file_route_name2=None, file_route_name3=None):
         """从存储恢复 .note 笔记文件"""
 
@@ -353,8 +354,7 @@ class Public_method:
 
         self.method.by_name_click(element_key="通用操作.笔记内-导入确认按钮")
 
-        from boox_automation.core.config import timeout_import_duration
-        self.method.by_pop_time(by_method=By.ID, locator="com.onyx.android.note:id/progress", timeout=timeout_import_duration(), prompt="导入笔记超时")
+        self.method.by_pop_time(by_method=By.ID, locator="com.onyx.android.note:id/progress", timeout=180, prompt="导入笔记超时")
 
         self.driver.press_keycode(3)
 

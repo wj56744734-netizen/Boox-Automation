@@ -240,25 +240,8 @@ def timeout_xml_element_wait() -> int:
     return get_int("timeout.xml_element_wait", 5)
 
 
-
-def timeout_long_press() -> int:
-    return get_int("timeout.long_press", 2000)
-
-
-def timeout_swipe() -> int:
-    return get_int("timeout.swipe", 300)
-
-
-def timeout_keyboard_hide() -> int:
-    return get_int("timeout.keyboard_hide", 1)
-
-
 def timeout_app_launch() -> int:
     return get_int("timeout.app_launch", 30)
-
-
-def timeout_import_duration() -> int:
-    return get_int("timeout.import_duration", 180)
 
 
 def retry_max_attempts() -> int:
