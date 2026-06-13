@@ -300,3 +300,87 @@ def _fmt_age(seconds: float) -> str:
     if seconds < 86400:
         return f"{int(seconds / 3600)}小时前"
     return f"{int(seconds / 86400)}天前"
+
+
+# ---- 消息与文件发送 ----
+
+def send_card_message(chat_id: str, card: dict) -> dict:
+    """向飞书群聊发送交互式卡片消息。
+
+    Args:
+        chat_id: 群聊 ID
+        card: 飞书卡片 JSON（dict 形式，不含 config/header 顶层键时自动补）
+    """
+    app_token = _get_tenant_token()
+    url = (
+        "https://open.feishu.cn/open-apis/im/v1/messages"
+        "?receive_id_type=chat_id"
+    )
+    body = {
+        "receive_id": chat_id,
+        "msg_type": "interactive",
+        "content": json.dumps(card, ensure_ascii=False),
+    }
+    return _feishu_request("POST", url, data=body, bearer_token=app_token)
+
+
+def upload_file_to_im(file_path: str, file_type: str = "stream") -> str:
+    """上传文件到飞书 IM，返回 file_key。
+
+    Args:
+        file_path: 本地文件路径
+        file_type: 文件类型（stream/opus/mp4/pdf/doc等），默认 stream
+    """
+    app_token = _get_tenant_token()
+    url = "https://open.feishu.cn/open-apis/im/v1/files"
+
+    with open(file_path, "rb") as f:
+        file_bytes = f.read()
+
+    file_name = os.path.basename(file_path)
+
+    try:
+        resp = requests.post(
+            url,
+            headers={"Authorization": f"Bearer {app_token}"},
+            files={"file": (file_name, file_bytes)},
+            data={
+                "file_type": file_type,
+                "file_name": file_name,
+            },
+            timeout=feishu_curl_timeout(),
+        )
+        if resp.status_code >= 400:
+            raise RuntimeError(
+                f"飞书文件上传失败: HTTP {resp.status_code}\n"
+                f"  响应: {resp.text[:500]}"
+            )
+    except requests.RequestException as e:
+        raise RuntimeError(f"飞书文件上传失败: {e}")
+
+    body = resp.json()
+    if body.get("code") != 0:
+        raise RuntimeError(
+            f"飞书文件上传返回错误: code={body.get('code')} msg={body.get('msg')}"
+        )
+    return body["data"]["file_key"]
+
+
+def send_file_message(chat_id: str, file_key: str) -> dict:
+    """向飞书群聊发送文件消息（需先通过 upload_file_to_im 上传）。
+
+    Args:
+        chat_id: 群聊 ID
+        file_key: 上传文件返回的 file_key
+    """
+    app_token = _get_tenant_token()
+    url = (
+        "https://open.feishu.cn/open-apis/im/v1/messages"
+        "?receive_id_type=chat_id"
+    )
+    body = {
+        "receive_id": chat_id,
+        "msg_type": "file",
+        "content": json.dumps({"file_key": file_key}),
+    }
+    return _feishu_request("POST", url, data=body, bearer_token=app_token)

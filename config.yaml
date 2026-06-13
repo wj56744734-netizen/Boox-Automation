@@ -121,10 +121,16 @@ feishu:
   # 环境变量 FEISHU_ELEMENT_SHEET_PREFIX 可覆盖
   element_sheet_prefix: ""
 
-  # --- 通用 ---
-  # 飞书群聊 ID，用于发送测试报告通知（可选）
-  chat_id: "oc_126bbbf208297b96a323413ffeaef1d8"
+  # --- 测试报告推送 ---
+  report:
+    # 是否启用飞书报告推送（true/false）
+    enabled: true
 
+    # 飞书群聊 ID，用于发送测试报告通知
+    # 环境变量 FEISHU_CHAT_ID 可覆盖
+    chat_id: "oc_126bbbf208297b96a323413ffeaef1d8"
+
+  # --- 通用 ---
   # curl 调用飞书 API 的超时时间
   curl_timeout: 15        # 秒
 

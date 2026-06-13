@@ -86,10 +86,17 @@ def pytest_configure(config):
     # 配置日志级别（由 pytest.ini 的 log_cli 统一管理输出）
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.INFO)
-    # 清除已有的 handler（避免重复输出）
+    # 清除已有的 handler（避免重复输出），加 NullHandler 防止 lastResort
     for handler in root_logger.handlers[:]:
         root_logger.removeHandler(handler)
-    # 不要在这里添加 StreamHandler！pytest 的 log_cli 会自动捕获并实时输出
+    root_logger.addHandler(logging.NullHandler())
+
+    # 动态设置 allure 结果目录
+    try:
+        from boox_automation.core.paths import new_allure_results_dir
+        config.option.allure_report_dir = str(new_allure_results_dir())
+    except Exception:
+        pass
 
 def pytest_collection_modifyitems(config, items):
     """统一过滤指定用例（兼容直接 pytest 与报告入口）"""
@@ -156,8 +163,14 @@ def _likely_needs_device(session):
     return False
 
 
+_SESSION_START = None
+
+
 def pytest_sessionstart(session):
     """会话开始：静音第三方日志 + 设备前置检查（无设备时干净退出）。"""
+    global _SESSION_START
+    _SESSION_START = time.time()
+
     logging.getLogger('selenium').setLevel(logging.WARNING)
     logging.getLogger('urllib3').setLevel(logging.ERROR)
     logging.getLogger('urllib3.connectionpool').setLevel(logging.ERROR)
@@ -193,12 +206,110 @@ def pytest_sessionstart(session):
 
 
 def pytest_sessionfinish(session, exitstatus):
-    """测试会话结束后自动清理超期产物（仅保留最近 N 轮）"""
+    """测试会话结束：推送飞书报告 + 清理超期产物"""
+    global _SESSION_START
+
+    # 1. 推送飞书报告
+    try:
+        _send_feishu_report(session)
+    except Exception as e:
+        logging.warning(f"飞书报告推送异常: {e}")
+
+    # 2. 清理超期产物
     try:
         from boox_automation.core.cleanup import cleanup_artifacts
         cleanup_artifacts()
     except Exception as e:
         logging.warning(f"自动清理产物失败: {e}")
+
+
+def _send_feishu_report(session) -> None:
+    """收集测试结果并推送飞书报告。"""
+    global _SESSION_START
+
+    # 获取 terminalreporter 统计
+    terminalreporter = session.config.pluginmanager.get_plugin("terminalreporter")
+    if terminalreporter is None:
+        return
+    stats = terminalreporter.stats
+
+    passed = len(stats.get("passed", []))
+    failed = len(stats.get("failed", []))
+    skipped = len(stats.get("skipped", []))
+
+    if passed + failed + skipped == 0:
+        return
+
+    from boox_automation.core.feishu_report import build_report_card, push_report
+    from boox_automation.devices.info import Device_basic_information
+    from boox_automation.core.config import test_modules as cfg_test_modules
+
+    duration_sec = time.time() - _SESSION_START if _SESSION_START else 0
+    failed_cases = _extract_case_titles(stats.get("failed", []), max_items=10)
+    skipped_cases = _extract_skipped_cases(stats.get("skipped", []), max_items=10)
+    modules = cfg_test_modules() or None
+
+    device = {}
+    try:
+        dbi = Device_basic_information()
+        device = dbi.get_device_info() or {}
+    except Exception:
+        pass
+
+    card = build_report_card(
+        passed=passed, failed=failed, skipped=skipped,
+        duration_sec=duration_sec,
+        modules=modules,
+        failed_cases=failed_cases or None,
+        skipped_cases=skipped_cases or None,
+        device=device,
+    )
+
+    allure_dir = getattr(session.config.option, "allure_report_dir", None)
+    push_report(card, allure_dir)
+    logging.info("飞书测试报告已推送")
+
+
+def _extract_case_titles(reports, max_items: int = 10) -> list[str]:
+    """从测试报告中提取用例标题。"""
+    titles = []
+    for rep in reports[:max_items]:
+        title = _parse_case_title(rep.nodeid)
+        if title:
+            titles.append(title)
+    return titles
+
+
+def _extract_skipped_cases(reports, max_items: int = 10) -> list[tuple[str, str]]:
+    """从跳过报告中提取 (标题, 原因)。"""
+    cases = []
+    for rep in reports[:max_items]:
+        title = _parse_case_title(rep.nodeid)
+        reason = ""
+        if hasattr(rep, "longrepr") and rep.longrepr:
+            reason = str(rep.longrepr).split("\n")[0].strip()
+            # 去掉 pytest.skip 前缀噪音
+            for prefix in ("Skipped: ", "[SKIP] ", "skip "):
+                if reason.lower().startswith(prefix.lower()):
+                    reason = reason[len(prefix):]
+        if title:
+            cases.append((title, reason or "跳过"))
+    return cases
+
+
+def _parse_case_title(nodeid: str) -> str:
+    """从 nodeid 提取用例标题。"""
+    if "[[" in nodeid:
+        return ""
+    bracket = nodeid.rfind("[")
+    if bracket < 0:
+        parts = nodeid.split("::")
+        return parts[-1] if len(parts) > 1 else nodeid
+    inner = nodeid[bracket + 1:].rstrip("]")
+    # 去掉行号前缀 R{数字}-
+    import re
+    inner = re.sub(r'^R\d+[-]', '', inner)
+    return inner
 
 
 def _run_adb_cleanup_commands(device_id, commands: list[str], label: str):

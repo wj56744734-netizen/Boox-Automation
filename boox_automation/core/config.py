@@ -135,6 +135,14 @@ def feishu_element_sheet_prefix() -> str:
             or get_str("feishu.element_sheet_prefix", "元素"))
 
 
+def feishu_report_enabled() -> bool:
+    return get_bool("feishu.report.enabled", False)
+
+
+def feishu_chat_id() -> str:
+    return os.environ.get("FEISHU_CHAT_ID") or get_str("feishu.report.chat_id", "")
+
+
 def feishu_curl_timeout() -> int:
     return get_int("feishu.curl_timeout", 15)
 
