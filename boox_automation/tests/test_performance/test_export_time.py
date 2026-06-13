@@ -1,6 +1,7 @@
 import logging
 import re
 import time
+import pytest
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -333,6 +334,8 @@ class Test_Note_Export_Time:
         self.method.wait_for_screen_size(start_screen_width=0.08, start_screen_height=0.04)
         self.method.by_element_click(element_key="通用操作.笔记内-返回按钮")
 
+    @pytest.mark.cleanup_app_data
+    @pytest.mark.cleanup_storage_files
     def test_note_export_time(self, note_test_initial):
 
         self.public.enter_note_app()

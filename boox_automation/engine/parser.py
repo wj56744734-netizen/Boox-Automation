@@ -74,7 +74,6 @@ class ParsedStep:
     action: str  # click / input / long_press / swipe_up / swipe_down / swipe_left / swipe_right / press_back / skip / assert_toast
     tag: str = ""  # 第一个【】= 元素标记
     element_key: str = ""  # 由 matcher 填入
-    input_ref: str = ""  # 输入动作的第二个【】= 变量引用（无则为空）
     status: str = ""  # pass / fail / skip
 
 
@@ -133,17 +132,11 @@ def parse_steps(raw_text: str) -> list[ParsedStep]:
 
         action = _detect_action(content, tag)
 
-        # 输入动作提取第二个【】作为变量引用
-        input_ref = ""
-        if action == "input" and len(tags) >= 2:
-            input_ref = tags[1]
-
         steps.append(ParsedStep(
             seq=seq,
             raw=line,
             action=action,
             tag=tag,
-            input_ref=input_ref,
         ))
 
     return steps
@@ -200,7 +193,17 @@ def parse_preconditions(raw_text: str | None) -> tuple[list[Precondition], dict[
             ))
             continue
 
-        # 3. 变量型 — 输入键-值
+        # 3. 清理型 — 需在 fixture 阶段执行
+        if content in ("清理应用数据", "清理存储文件"):
+            kind = "app_data" if content == "清理应用数据" else "storage_files"
+            preconditions.append(Precondition(
+                raw=content,
+                type="cleanup",
+                kind=kind,
+            ))
+            continue
+
+        # 4. 变量型 — 输入键-值
         if content.startswith("输入"):
             inner = content[2:]
             dash_idx = inner.find("-")
@@ -218,10 +221,15 @@ def parse_preconditions(raw_text: str | None) -> tuple[list[Precondition], dict[
             preconditions.append(Precondition(raw=content, type="descriptive"))
             continue
 
-        # 4. 描述型（保留完整行文本，【】只是内联引用非条件关键字）
+        # 5. 描述型（保留完整行文本，【】只是内联引用非条件关键字）
         preconditions.append(Precondition(raw=line, type="descriptive"))
 
     return preconditions, variables
+
+
+def has_cleanup(preconditions: list, kind: str) -> bool:
+    """检查前置条件中是否包含指定清理类型。kind: 'app_data' | 'storage_files'"""
+    return any(pc.type == "cleanup" and pc.kind == kind for pc in preconditions)
 
 
 def _detect_action(text: str, tag: str) -> str:

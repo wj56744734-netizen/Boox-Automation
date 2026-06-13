@@ -12,6 +12,7 @@ from boox_automation.tests.helpers import Public_method, device_size, device_id
 import logging
 import subprocess
 import time
+import pytest
 
 
 class Test_Render_Time:
@@ -305,6 +306,8 @@ class Test_Render_Time:
         logging.error(f"达到最大尝试次数，未找到笔记：'{note_name}'")
         return False
 
+    @pytest.mark.cleanup_app_data
+    @pytest.mark.cleanup_storage_files
     def test_render_time(self, note_test_initial):
         version_str = self.public.get_version(short=True)
 

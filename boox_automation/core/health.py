@@ -86,6 +86,33 @@ def ensure_adb_device_ready(device_id, retries=None, retry_delay=None):
     raise RuntimeError(f"设备未就绪：{device_id}，最后状态：{last_state}")
 
 
+def ensure_device_awake(device_id):
+    """确保设备屏幕处于唤醒状态，休眠则自动点亮。"""
+    result = subprocess.run(
+        ["adb", "-s", device_id, "shell", "dumpsys", "power"],
+        capture_output=True, text=True,
+    )
+    if "mWakefulness=Awake" in (result.stdout or ""):
+        return
+
+    logging.info("设备屏幕休眠，尝试唤醒...")
+    subprocess.run(
+        ["adb", "-s", device_id, "shell", "input", "keyevent", "26"],
+        capture_output=True, text=True,
+    )
+    time.sleep(1)
+
+    # 验证唤醒结果
+    result2 = subprocess.run(
+        ["adb", "-s", device_id, "shell", "dumpsys", "power"],
+        capture_output=True, text=True,
+    )
+    if "mWakefulness=Awake" in (result2.stdout or ""):
+        logging.info("设备已唤醒")
+    else:
+        logging.warning("设备可能未成功唤醒，继续执行")
+
+
 def run_adb_command_with_retry(command, retries=None, retry_delay=None):
     """执行单条 adb 命令并自动重试。"""
     from boox_automation.core.config import (

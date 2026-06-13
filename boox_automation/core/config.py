@@ -210,6 +210,28 @@ def adb_command_delay() -> int:
     return get_int("adb.command_delay", 2)
 
 
+def adb_cleanup_app_data_packages() -> list[str]:
+    """【清理应用数据】pm clear 目标包名列表。环境变量 ADB_CLEANUP_PACKAGES 逗号分隔可覆盖。"""
+    env = os.environ.get("ADB_CLEANUP_PACKAGES")
+    if env:
+        return [p.strip() for p in env.split(",") if p.strip()]
+    pkgs = get("adb.cleanup.app_data.packages")
+    if isinstance(pkgs, list):
+        return [str(p) for p in pkgs]
+    return ["com.onyx.android.note", "com.onyx.android.ksync", "com.onyx"]
+
+
+def adb_cleanup_storage_paths() -> list[str]:
+    """【清理存储文件】rm -rf 目标路径列表。环境变量 ADB_CLEANUP_PATHS 逗号分隔可覆盖。"""
+    env = os.environ.get("ADB_CLEANUP_PATHS")
+    if env:
+        return [p.strip() for p in env.split(",") if p.strip()]
+    paths = get("adb.cleanup.storage_files.paths")
+    if isinstance(paths, list):
+        return [str(p) for p in paths]
+    return ["/sdcard/note/*"]
+
+
 def timeout_default() -> int:
     return get_int("timeout.default", 5)
 

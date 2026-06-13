@@ -10,7 +10,7 @@ sys.stdout.reconfigure(line_buffering=True)
 from boox_automation.ui_ops.operations import Operation_method
 from boox_automation.devices.info import Device_basic_information
 from boox_automation.driver import driver, ensure_driver_alive
-from boox_automation.core.health import ensure_adb_device_ready, run_adb_command_with_retry
+from boox_automation.core.health import ensure_adb_device_ready, run_adb_command_with_retry, ensure_device_awake
 import pytest
 import time
 from selenium.webdriver.common.by import By
@@ -80,6 +80,8 @@ def pytest_addoption(parser):
 def pytest_configure(config):
     """注册测试标记并配置日志"""
     config.addinivalue_line("markers", "test: 测试用例")
+    config.addinivalue_line("markers", "cleanup_app_data: 测试前清理应用数据（pm clear）")
+    config.addinivalue_line("markers", "cleanup_storage_files: 测试前清理存储文件（rm -rf）")
 
     # 配置日志级别（由 pytest.ini 的 log_cli 统一管理输出）
     root_logger = logging.getLogger()
@@ -171,7 +173,7 @@ def pytest_sessionstart(session):
         device_id = devices.get_connected_device_ids()
 
         logging.info("=" * 60)
-        logging.info("  笔记自动化测试")
+        logging.info("  Boox 自动化测试 ")
         logging.info("=" * 60)
 
         devices.check_device_language(device_id)
@@ -199,35 +201,34 @@ def pytest_sessionfinish(session, exitstatus):
         logging.warning(f"自动清理产物失败: {e}")
 
 
-def adb_clean_note(device_id):
-    """根据设备类型清理应用数据"""
-    adb_commands_reader = [
-        f'adb -s {device_id} shell pm clear com.onyx.android.note',
-        f'adb -s {device_id} shell pm clear com.onyx.android.ksync',
-        f'adb -s {device_id} shell pm clear com.onyx',
-        f'adb -s {device_id} shell rm -rf /sdcard/note/*',
-    ]
-    adb_commands_tablet = [
-        f'adb -s {device_id} shell pm clear com.onyx.android.note',
-        f'adb -s {device_id} shell pm clear com.onyx.android.ksync',
-        f'adb -s {device_id} shell pm clear com.onyx',
-        f'adb -s {device_id} shell rm -rf /sdcard/note/*',
-    ]
-    devices = Device_basic_information()
-    device_info = devices.get_device_info()
+def _run_adb_cleanup_commands(device_id, commands: list[str], label: str):
+    """执行一组 ADB 清理命令。"""
+    if not commands:
+        return
+    try:
+        ensure_adb_device_ready(device_id)
+        for command in commands:
+            time.sleep(1)
+            run_adb_command_with_retry(command)
+    except Exception as e:
+        logging.critical(f"{label}失败: {e}")
+        pytest.fail(f"{label}失败: {e}")
 
-    if device_info:
-        device_type = device_info.get('devices_reader')
-        adb_commands = adb_commands_tablet if device_type == "平板" else adb_commands_reader
 
-        try:
-            ensure_adb_device_ready(device_id)
-            for command in adb_commands:
-                time.sleep(1)
-                run_adb_command_with_retry(command)
-        except Exception as e:
-            logging.critical(f"执行命令时发生异常: {str(e)}")
-            pytest.fail(f"清理设备数据失败: {str(e)}")
+def adb_clean_app_data(device_id):
+    """清理应用数据（pm clear），由前置条件【清理应用数据】触发。"""
+    from boox_automation.core.config import adb_cleanup_app_data_packages
+    packages = adb_cleanup_app_data_packages()
+    commands = [f'adb -s {device_id} shell pm clear {pkg}' for pkg in packages]
+    _run_adb_cleanup_commands(device_id, commands, "清理应用数据")
+
+
+def adb_clean_storage_files(device_id):
+    """清理存储文件（rm -rf），由前置条件【清理存储文件】触发。"""
+    from boox_automation.core.config import adb_cleanup_storage_paths
+    paths = adb_cleanup_storage_paths()
+    commands = [f'adb -s {device_id} shell rm -rf {path}' for path in paths]
+    _run_adb_cleanup_commands(device_id, commands, "清理存储文件")
 
 # --------------------- 测试初始化fixture ---------------------
 DEVICE_INFO_PRINTED = False
@@ -237,7 +238,7 @@ _DRIVER_FAILURE_THRESHOLD = driver_failure_threshold()
 
 
 @pytest.fixture(scope='function', autouse=False)
-def note_test_initial():
+def note_test_initial(request):
     """测试初始化fixture，包含设备信息和环境准备"""
     global _DRIVER_FAILURE_COUNT
     devices = Device_basic_information()
@@ -262,8 +263,28 @@ def note_test_initial():
 
     global DEVICE_INFO_PRINTED
 
-    # 清理设备数据
-    adb_clean_note(device_id)
+    # 按前置条件或 marker 决定是否清理（默认不清理）
+    needs_clean_app_data = False
+    needs_clean_storage = False
+    case = None
+    if hasattr(request.node, 'callspec') and request.node.callspec:
+        case = request.node.callspec.params.get('case')
+    if case is not None:
+        from boox_automation.engine.parser import has_cleanup
+        needs_clean_app_data = has_cleanup(case.preconditions, 'app_data')
+        needs_clean_storage = has_cleanup(case.preconditions, 'storage_files')
+    else:
+        # 非 Excel 用例（如性能脚本）通过 marker 控制
+        needs_clean_app_data = request.node.get_closest_marker('cleanup_app_data') is not None
+        needs_clean_storage = request.node.get_closest_marker('cleanup_storage_files') is not None
+
+    if needs_clean_app_data:
+        adb_clean_app_data(device_id)
+    if needs_clean_storage:
+        adb_clean_storage_files(device_id)
+
+    # 确保设备唤醒后再探活 driver
+    ensure_device_awake(device_id)
 
     # 启动测试前先探活 driver（带 session 重建），连续失败 N 次则终止 session
     try:

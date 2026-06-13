@@ -67,6 +67,17 @@ adb:
   command_retries: 3        # 次
   command_delay: 2          # 秒
 
+  # 应用数据清理命令（由前置条件【清理应用数据】触发）
+  cleanup:
+    app_data:
+      packages:               # pm clear 目标包名
+        - com.onyx.android.note
+        - com.onyx.android.ksync
+        - com.onyx
+    storage_files:            # rm -rf 目标路径
+      paths:
+        - /sdcard/note/*
+
 # ==================== Excel / 用例配置 ====================
 excel:
   # --- 用例 ---

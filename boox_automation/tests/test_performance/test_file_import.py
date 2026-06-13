@@ -16,6 +16,8 @@ class Test_import_the_file:
         self.method = Operation_method(self.driver)
         self.public = Public_method()
 
+    @pytest.mark.cleanup_app_data
+    @pytest.mark.cleanup_storage_files
     def test_4_local_file_note(self, note_test_initial):
         """""
         回归用例P0 ---
