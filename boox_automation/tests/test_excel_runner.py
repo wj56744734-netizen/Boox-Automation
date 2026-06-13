@@ -381,14 +381,7 @@ def _dispatch_step(method, public, step, variables: dict[str, str] | None = None
         method.wait_check_toast(toast_true=toast_true, toast_timeout=5)
 
     elif step.action == "input":
-        # 确定输入内容：优先变量引用 → 步骤文本解析
-        input_text = ""
-        if step.input_ref:
-            input_text = vars_.get(step.input_ref, step.input_ref)
-        if not input_text:
-            text_match = re.search(r"输入(.+?)(?:字符|$)", step.raw)
-            input_text = text_match.group(1) if text_match else "test"
-        method.wait_input_box(element_key=ek, name=input_text)
+        method.wait_input_box(element_key=ek)
 
     elif step.action == "long_press":
         method.wait_for_press_name(element_key=ek)

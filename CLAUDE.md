@@ -45,10 +45,6 @@ NOTE_DESELECT_NODEIDS="test_excel_runner.py::test_case[跳过]*" pytest
 ```bash
 # 安装依赖（macOS / Windows 通用）
 pip install -r requirements.txt
-
-# Windows 额外步骤：复制环境变量模板
-copy .env.example .env
-# 编辑 .env，将 PYTHONPATH 改为实际项目路径
 ```
 
 **跨平台兼容**：飞书 API 调用使用 Python `requests` 库，无需安装 `curl`。Windows/Linux/macOS 开箱即用。
@@ -125,7 +121,7 @@ tests/test_excel_runner  ← pytest 入口
 - **用例运行时完整性校验** (`validate_case()`)：每条用例执行前检查步骤号是否重复、`【】` 标记的元素是否都能匹配到。有问题则跳过并打印 WARNING 日志，不再静默执行不完整的用例。
 - **操作加固机制** (`Base_note_class`)：所有点击/长按/输入后统一 `_settle_ui()` 沉降等待；dismiss 弹窗后 `wait_popup_gone()` 轮询验证消失（3s × 2次重试）；输入后回读验证文本正确性。
 - **配置集中**：所有可调参数统一在 `config.yaml`，通过 `core/config.py` 的便捷函数读取。环境变量自动覆盖配置文件。
-- **数据代码分离**：Excel 数据文件放在 `data/`，文档放在 `docs/`，不和代码混放。
+- **数据代码分离**：Excel 数据文件放在 `data/`，不和代码混放。
 - **DriverProxy 代理模式** (`driver.py`)：全项目通过 `from boox_automation.driver import driver` 共享同一实例。底层 real driver 断连后可热切换。
 - **智能重试装饰器** (`operations.py:retry_and_handle_exceptions`)：仅对 `TimeoutException / StaleElement / NoSuchElement / ElementNotInteractable` 重试，会话级异常直接抛出。重试次数从 config.yaml 读取。
 - **元素中文目录** (`element_catalog.py`)：locator → 中文用途映射。失败时自动附加到错误日志和 Allure 截图标题。
@@ -182,7 +178,7 @@ from boox_automation.core.config import timeout_default, retry_max_attempts
 
 ## 开发约定
 
-- **写测试用例**：编辑飞书表格（云端）或 `data/test_cases.xlsx`（本地），参考 `docs/使用指南.md`
+- **写测试用例**：编辑飞书表格（云端）或 `data/test_cases.xlsx`（本地）
 - **定义元素**：编辑飞书表格（云端）或 `data/elements.xlsx`（本地），每个 Sheet 对应一个页面
 - **新增业务流方法**：加在 `tests/helpers.py`，只通过 `Operation_method` 暴露的 API 操作 UI
 - **新增/修改 locator**：同步在 `ui_ops/element_catalog.py` 补中文描述
@@ -211,7 +207,7 @@ from boox_automation.core.config import timeout_default, retry_max_attempts
 | 值 | 说明 | locator 格式 |
 |---|---|---|
 | `点击` | 点击元素（**默认值**） | XPath |
-| `输入` | 输入文本 | XPath |
+| `输入` | 输入文本 | `XPath,输入文本` 逗号分隔，逗号前为输入框定位，逗号后为要输入的文本 |
 | `长按` | 长按元素 | XPath |
 | `校验toast` | 校验 Toast 提示 | XPath |
 | `点击坐标` | 按屏幕比例坐标点击 | `x,y` 如 `0.5,0.3` |
@@ -225,7 +221,7 @@ from boox_automation.core.config import timeout_default, retry_max_attempts
 | 步骤关键词 | 动作 | 需 `【】` 元素匹配 |
 |---|---|---|
 | 点击/打开/进入/选择/双击/退出/返回/清空/确认/关闭 | `点击` | 是 |
-| 输入 | `输入` | 是 |
+| 输入 | `输入` | 是，locator 为 `XPath,输入文本` |
 | 长按 | `长按` | 是 |
 | 点击坐标 | `点击坐标` | 是，locator 为 `x,y` |
 | 长按坐标 | `长按坐标` | 是，locator 为 `x,y` |
@@ -475,7 +471,6 @@ for s_name, sheet in sheets.items():
   - API 接口（参数名、返回值格式）
 - **规范修改必须同步所有数据源**：修改任何格式规范后，必须同步更新以下**所有**位置，缺一不可：
   - `CLAUDE.md` 中的对应规范说明
-  - `docs/使用指南.md` 中的对应章节
   - **飞书元素表**：各 sheet 的第 1 行注释行（使用说明），以及所有受影响的元素定义
   - **飞书用例表**：各 sheet 的第 1 行注释行（使用说明），以及受影响的用例行（操作步骤、预期结果等列）
   - `scripts/update_feishu_sheets.py` 中的飞书注释行（如涉及元素表列）

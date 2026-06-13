@@ -21,7 +21,7 @@ boox_automation/scripts/Note_page_contrast/temporary_image/
 boox_automation/scripts/Note_page_contrast/exception_page/
 
 # Environment (credentials)
-boox_automation/.env
+.env
 
 # Excel data files（云端优先，本地仅离线开发用）
 *.xlsx

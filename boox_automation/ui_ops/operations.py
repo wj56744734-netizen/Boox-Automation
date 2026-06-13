@@ -1237,10 +1237,32 @@ class Operation_method(Base_note_class):
         if element_key is not None:
             loc = self._resolve_locator(element_key)
             locator_type, locator_value = loc['by'], loc['value']
-            input_text = name or loc.get('name')
+
+            # 解析 locator 中逗号分隔的输入文本: "//xpath,输入内容"
+            input_text = ""
+            comma_idx = -1
+            in_quote = False
+            quote_char = ''
+            for i, ch in enumerate(locator_value):
+                if ch in ('"', "'") and (not in_quote or ch == quote_char):
+                    in_quote = not in_quote
+                    if in_quote:
+                        quote_char = ch
+                    else:
+                        quote_char = ''
+                elif not in_quote and ch == ',':
+                    comma_idx = i
+                    break
+            if comma_idx > 0:
+                input_text = locator_value[comma_idx + 1:].strip()
+                locator_value = locator_value[:comma_idx].strip()
+
             if not input_text:
-                raise AssertionError(f"元素 '{element_key}' 未配置 'name' 字段且未传入 name 参数")
-            display = loc.get('operation') or loc.get('name') or str(locator_value)
+                raise AssertionError(
+                    f"元素 '{element_key}' 定位方式未配置输入文本，"
+                    f"格式应为 '//xpath,输入内容'，当前为: {loc['value']}"
+                )
+            display = loc.get('operation') or element_key
             step_msg = f"输入\"{input_text}\" →「{display}」"
         elif by_method is not None and locator is not None:
             locator_type, locator_value = by_method, locator
