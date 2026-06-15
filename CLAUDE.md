@@ -120,7 +120,7 @@ tests/test_excel_runner  ← pytest 入口
 **关键设计决策：**
 
 - **缓存优先加载**：元素和用例默认先尝试飞书云端，成功后自动缓存到 `data/.cache/`；下次启动优先用缓存（24h 有效），后台检查连通性决定是否刷新。`USE_LOCAL_EXCEL=1` 回退到本地 `data/` 下的 xlsx 文件。三级回退链：云端 → 缓存 → 本地 Excel。
-- **用例和元素分离**：两个独立飞书表格 token（`feishu.test_case_token` / `feishu.elements_token`），支持用例多 sheet 列表加载。
+- **用例和元素分离**：两个独立飞书表格 token（`feishu.test_case_token` / `feishu.elements_token`）。用例和元素按 `test_case_sheets` 统一筛选 sheet，"通用"始终自动加载。
 - **用例运行时完整性校验** (`validate_case()`)：每条用例执行前检查步骤号是否重复、`【】` 标记的元素是否都能匹配到。有问题则跳过并打印 WARNING 日志，不再静默执行不完整的用例。
 - **操作加固机制** (`Base_note_class`)：所有点击/长按/输入后统一 `_settle_ui()` 沉降等待；dismiss 弹窗后 `wait_popup_gone()` 轮询验证消失（3s × 2次重试）；输入后回读验证文本正确性。
 - **配置集中**：所有可调参数统一在 `config.yaml`，通过 `core/config.py` 的便捷函数读取。环境变量自动覆盖配置文件。
@@ -152,7 +152,7 @@ from boox_automation.core.config import timeout_default, retry_max_attempts
 | `appium` | host, port, startup_timeout, capabilities |
 | `adb` | device_ready_retries, command_retries 及对应 delay |
 | `excel` | test_case_sheet, priority_filter, test_case_file, elements_file, columns（列索引） |
-| `feishu` | app_id/secret, test_case_token, elements_token, test_case_sheets, element_sheet_prefix, curl_timeout |
+| `feishu` | app_id/secret, test_case_token, elements_token, test_case_sheets, curl_timeout |
 | `logcat` | capture_timeout |
 | `screenshot` | dir, prefix, enabled |
 | `toast` | timeout, retry, retry_delay |
@@ -177,18 +177,17 @@ from boox_automation.core.config import timeout_default, retry_max_attempts
 | `FEISHU_APP_ID` / `FEISHU_APP_SECRET` | 覆盖飞书应用凭证 |
 | `FEISHU_TEST_CASE_TOKEN` / `FEISHU_ELEMENTS_TOKEN` | 覆盖表格 token |
 | `NOTE_TEST_CASE_SHEETS` | 覆盖用例 sheet 列表（逗号分隔） |
-| `FEISHU_ELEMENT_SHEET_PREFIX` | 覆盖元素 sheet 前缀筛选 |
 
 ## 开发约定
 
 - **写测试用例**：编辑飞书表格（云端）或 `data/test_cases.xlsx`（本地）
-- **定义元素**：编辑飞书表格（云端）或 `data/elements.xlsx`（本地），每个 Sheet 对应一个页面
+- **定义元素**：编辑飞书表格（云端）或 `data/elements.xlsx`（本地），Sheet 名与 `test_case_sheets` 一致（如"笔记"）
 - **新增业务流方法**：加在 `tests/helpers.py`，只通过 `Operation_method` 暴露的 API 操作 UI
 - **新增/修改 locator**：同步在 `ui_ops/element_catalog.py` 补中文描述
 - **产物路径**：使用 `core/paths.py` 工厂方法，不硬编码
 - **新增 Python 测试用例**：放在 `tests/`，用 `@note_mark_china` / `@note_mark_increment` 等装饰器贴标签
 - **新增配置项**：加在 `config.yaml` + `core/config.py` 便捷函数
-- **新增用例模块**：在飞书用例表中新建 sheet，`config.yaml` 的 `feishu.test_case_sheets` 列表加一行
+- **新增用例模块**：在飞书用例表中新建 sheet，`config.yaml` 的 `excel.test_case_sheets` 列表加一行。同时确保元素表中有同名 sheet 和 `预期结果【模块名】` sheet
 
 ## 前置条件规范
 
@@ -256,18 +255,26 @@ test_excel_runner.py:test_case()
 
 ## 元素表规范
 
-元素定义在飞书表格（云端）或 `data/elements.xlsx`（本地），每个 Sheet 对应一个页面。第 1 行为注释行（含完整使用说明），第 2 行为表头（支持中英文），第 3 行起为数据。
+元素定义在飞书表格（云端）或 `data/elements.xlsx`（本地），每个 Sheet 名与 `test_case_sheets` 配置一致，表示一个功能模块（如"笔记"）。"通用"模块始终自动加载。表头行自动检测（含"模块"/"匹配文本"等关键字的行即为表头），支持带或不带注释行两种格式。
+
+**加载规则**：
+
+- **元素 sheet**：Sheet 名匹配 `test_case_sheets` 中任一值，或精确匹配"通用"（始终加载）。不含 `【】` 的 sheet 名按遗留格式处理，维持向后兼容
+- **预期结果 sheet**：格式 `预期结果【Sheet名】`，如 `预期结果【笔记】`、`预期结果【通用】`。按 `test_case_sheets` + "通用" 列表逐一加载
+- 找不到匹配 sheet 时输出 WARNING 日志并列出可用 sheet 名
 
 **6 列结构（原 overrides / dismiss_with / checks 列已移除）：**
 
 | 中文表头 | 英文兼容 | 必填 | 说明 |
 |---|---|---|---|
-| 元素标识 | key | ✓ | 格式 `页面名.元素名`，全局唯一 |
-| 匹配文本 | match | | 测试步骤中 `【】` 内的文字 |
-| 定位方式 | locator | ✓ | XPath 或纯文本，支持多设备「键：」分块 |
-| 操作类型 | action | | 中文值，不填自动推断 |
+| 模块 | key | ✓ | 页面/功能区域名（如 笔记首页、手写笔记），与匹配文本拼接为 key |
+| 匹配文本 | match | | 测试步骤中 `【】` 内的文字，与模块列拼接 = 元素标识 |
+| 定位元素 | locator | ✓ | XPath 或纯文本，支持多设备「键：」分块 |
+| 操作 | action | | 中文值，不填自动推断 |
 | 用途说明 | operation | | 日志/截图中的元素描述 |
 | 序号 | index | | 同 match 多元素时区分 |
+
+**元素标识构造**：key = `模块.匹配文本`（如 模块=笔记首页，匹配文本=创建笔记按钮 → key=`笔记首页.创建笔记按钮`）。旧格式 A 列直接含 '.' 时视为完整 key 不做拼接。匹配优先用 `page_context.tag` 直接定位，找不到再回退反向索引。
 
 **操作类型（中文）：**
 
@@ -337,15 +344,21 @@ I 列的 `【X】` 在 H 列没有对应 `检查` → WARNING 提示，不阻断
 | `【{text}】toast提示` | toast | `wait_check_toast(toast_true=)` | 否 |
 | `【{text}】toast不出现` | toast_not | `wait_check_toast(toast_false=)` | 否 |
 
-### 预期结果 Sheet（飞书元素表中 `预期结果` sheet，5 列 A-E）
+### 预期结果 Sheet（飞书元素表中 `预期结果【Sheet名】` sheet）
+
+按模块拆分为多个 sheet，格式 `预期结果【Sheet名】`（如 `预期结果【笔记】`、`预期结果【通用】`）。每个 sheet 结构相同（5 列）：
 
 | 列 | 中文名 | 说明 | 必填 |
 |---|---|---|---|
-| A | 元素标识 | 唯一 key，格式 `页面.页面状态` | ✓ |
+| A | 模块 | key 前缀（如 手写笔记），与匹配文本拼接 | ✓ |
 | B | 匹配文本 | I 列 `【】` 通过此列关联 | ✓ |
-| C | 页面XML | 从 Appium Inspector 导出，支持多设备「键：」分块 | C/D 二选一 |
-| D | 检查元素 | XPath 选择器，每行一个，支持多设备「键：」分块 | C/D 二选一 |
+| C | 定位元素 | XPath 选择器，每行一个，支持多设备「键：」分块 | C/D 二选一 |
+| D | xml页面 | 从 Appium Inspector 导出，支持多设备「键：」分块 | C/D 二选一 |
 | E | 用途说明 | 人类可读描述（不影响执行） | |
+
+key 构造同元素表：`模块.匹配文本`（如 手写笔记.创建页）。
+
+模块加载顺序：按 `test_case_sheets` 配置 + "通用" 逐一查找 `预期结果【模块名】`，不存在的模块静默跳过。
 
 ### 校验优先级
 
@@ -446,7 +459,7 @@ I 列: 【弹窗内容】                   → XML 对比或 XPath 检查（弹
 ```
 ERROR  function_name(params) 在 N 次重试后仍失败
   ↳ 定位:   当前操作的定位器（xpath / id 等）
-  ↳ 元素键: 飞书元素表中的 key（格式：页面.元素名）
+  ↳ 元素键: 飞书元素表中的 key（格式：页面名.元素名）
   ↳ YAML:   元素来源文件 + 行号
   ↳ 调用链: 从用例入口到失败点的完整函数调用链
   ↳ 触发位置: 代码文件和行号
@@ -467,7 +480,7 @@ import json
 with open('boox_automation/data/.cache/elements.json') as f:
     data = json.load(f)
 sheets = data['data']['sheets']
-# 用元素键中的页面名和元素名查找
+# 用元素键（格式：页面名.元素名）查找
 k = '页面名.元素名'
 for s_name, sheet in sheets.items():
     if k in sheet:

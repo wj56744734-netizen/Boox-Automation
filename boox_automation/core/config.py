@@ -130,10 +130,6 @@ def test_case_sheets() -> list[str]:
     return ["笔记"]
 
 
-def feishu_element_sheet_prefix() -> str:
-    return (os.environ.get("FEISHU_ELEMENT_SHEET_PREFIX")
-            or get_str("feishu.element_sheet_prefix", "元素"))
-
 
 def feishu_report_enabled() -> bool:
     return get_bool("feishu.report.enabled", False)

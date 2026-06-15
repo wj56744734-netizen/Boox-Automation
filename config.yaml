@@ -116,15 +116,13 @@ feishu:
   # 同用例，填 URL 或纯 token 均可
   # 环境变量 FEISHU_ELEMENTS_TOKEN 可覆盖
   elements_token: "https://s07005grio.feishu.cn/sheets/LjYzsLHSOh3xyItZ7TLcqnqvn3e?sheet=0dVwPT"
-  # 元素 Sheet 名前缀，匹配此前缀的 Sheet 视为元素定义页
-  # 留空则加载全部 sheet（排除"使用说明"）
-  # 环境变量 FEISHU_ELEMENT_SHEET_PREFIX 可覆盖
-  element_sheet_prefix: ""
+  # 元素 sheet 按模块名筛选，与 test_case_sheets 保持一致
+  # 始终自动加载"通用"模块（无需手动配置）
 
   # --- 测试报告推送 ---
   report:
     # 是否启用飞书报告推送（true/false）
-    enabled: true
+    enabled: false
 
     # 飞书群聊 ID，用于发送测试报告通知
     # 环境变量 FEISHU_CHAT_ID 可覆盖

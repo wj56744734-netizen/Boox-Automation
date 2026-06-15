@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 
 from selenium.webdriver.common.by import By
@@ -48,6 +49,27 @@ _DEVICE_ACTIONS = {
 
 
 # ---- 多设备块解析（元素 C 列 + 预期结果 C 列通用） ----
+
+# 预期结果 sheet 名格式: 预期结果【模块名】
+_EXPECTED_SHEET_MODULE_RE = re.compile(r"预期结果【(.+?)】")
+
+# 表头关键字（用于自动检测哪行是表头）
+_HEADER_KEYWORDS = {"模块", "元素标识", "匹配文本", "定位方式", "定位元素", "操作类型", "操作", "页面XML", "xml页面", "检查元素", "用途说明"}
+
+
+def _find_header_row(rows: list, default: int = 1) -> int:
+    """自动检测表头行位置。任意行含表头关键字即视为表头行。
+
+    Returns: 表头行索引，未找到返回 default。
+    """
+    for i, row in enumerate(rows):
+        if not row:
+            continue
+        texts = {str(c).strip() for c in row if c}
+        if _HEADER_KEYWORDS & texts:
+            return i
+    return default
+
 
 # 有效的设备键
 _VALID_DEVICE_KEYS = {
@@ -412,35 +434,52 @@ class ElementLoader:
     def _load_from_cloud(self):
         """从飞书电子表格加载元素定义。"""
         from boox_automation.core.feishu import list_sheet_names, read_sheet_by_name
-        from boox_automation.core.config import (
-            feishu_elements_token, feishu_element_sheet_prefix)
+        from boox_automation.core.config import feishu_elements_token, test_case_sheets
 
         token = feishu_elements_token()
-        prefix = feishu_element_sheet_prefix()
+        modules = {"通用"} | set(test_case_sheets())
         all_sheets = list_sheet_names(token)
 
-        # 过滤：支持前缀匹配；前缀为空时加载全部（排除 使用说明）
-        if prefix:
-            element_sheets = [s for s in all_sheets if s.startswith(prefix)]
-        else:
-            element_sheets = [s for s in all_sheets if s != "使用说明"]
+        def _sheet_matches_module(sheet_name: str) -> bool:
+            """sheet 名匹配任一配置模块（含【】格式、遗留无【】格式）。"""
+            if sheet_name == "使用说明":
+                return False
+            if _EXPECTED_SHEET_MODULE_RE.match(sheet_name):
+                return False
+            # 「通用」sheet 名精确匹配
+            if sheet_name == "通用":
+                return True
+            # 【模块名】格式
+            for mod in modules:
+                if f"【{mod}】" in sheet_name:
+                    return True
+            # 遗留格式：不含【】的 sheet 无条件加载（向后兼容）
+            if "【" not in sheet_name:
+                return True
+            return False
+
+        element_sheets = [s for s in all_sheets if _sheet_matches_module(s)]
 
         if not element_sheets:
             logger.warning(
-                f"飞书表格中无可用 sheet（prefix='{prefix}'），已加载 {len(self._elements)} 个元素"
+                f"飞书表格中无模块 {sorted(modules)} 匹配的 sheet，已加载 {len(self._elements)} 个元素"
             )
             return
 
         total = 0
         for sheet_name in element_sheets:
             rows = read_sheet_by_name(sheet_name, token)
-            if len(rows) < 3:
+            if len(rows) < 2:
                 continue
-            headers = [str(c).strip() for c in rows[1]]  # 第2行为表头
-            for row in rows[2:]:
+            h_idx = _find_header_row(rows)
+            headers = [str(c).strip() for c in rows[h_idx]]
+            for row in rows[h_idx + 1:]:
                 if not row or not row[0]:
                     continue
-                key = str(row[0]).strip()
+                a_val = str(row[0]).strip()
+                b_val = str(row[1]).strip() if len(row) > 1 and row[1] else ""
+                # 旧格式: A列含'.' = 完整key; 新格式: A列=模块名, key=模块.匹配文本
+                key = a_val if "." in a_val or not b_val else f"{a_val}.{b_val}"
                 info = self._parse_row(row, headers, key=key)
                 self._elements[key] = info
                 self._key_source[key] = f"feishu::{sheet_name}"
@@ -449,9 +488,6 @@ class ElementLoader:
         logger.debug(f"已从飞书加载 {total} 个元素定义 ({len(element_sheets)} 个 Sheet)")
 
     # ---- 预期结果 sheet 加载 ----
-
-    # 预期结果 sheet 名
-    _EXPECTED_SHEET = "预期结果"
 
     def _load_expected_results(self):
         """加载「预期结果」sheet（三级回退：云端 → 缓存 → 本地）。"""
@@ -484,18 +520,32 @@ class ElementLoader:
         self._load_expected_from_local()
 
     def _load_expected_from_cloud(self):
-        """从飞书加载预期结果 sheet。"""
-        from boox_automation.core.feishu import read_sheet_by_name
-        from boox_automation.core.config import feishu_elements_token
+        """从飞书加载预期结果 sheet（多模块格式：预期结果【模块名】）。"""
+        from boox_automation.core.feishu import list_sheet_names, read_sheet_by_name
+        from boox_automation.core.config import feishu_elements_token, test_case_sheets
 
         token = feishu_elements_token()
-        rows = read_sheet_by_name(self._EXPECTED_SHEET, token)
-        if not rows or len(rows) < 3:
-            logger.debug("飞书中无「预期结果」sheet 或数据不足，跳过")
-            return
+        modules = ["通用"] + test_case_sheets()
+        all_sheets = list_sheet_names(token)
+        total_before = len(self._expected_results)
 
-        self._parse_expected_rows(rows)
-        logger.debug(f"已从飞书加载 {len(self._expected_results)} 个预期结果定义")
+        for module in modules:
+            sheet_name = f"预期结果【{module}】"
+            if sheet_name not in all_sheets:
+                continue
+            rows = read_sheet_by_name(sheet_name, token)
+            if not rows or len(rows) < 2:
+                continue
+            self._parse_expected_rows(rows)
+
+        loaded = len(self._expected_results) - total_before
+        if loaded:
+            logger.debug(
+                f"已从飞书加载 {loaded} 个预期结果定义 "
+                f"（模块: {', '.join(modules)}）"
+            )
+        else:
+            logger.debug("飞书中无模块化预期结果 sheet，跳过")
 
     def _save_expected_to_cache(self):
         """将预期结果数据保存到本地缓存。"""
@@ -522,7 +572,9 @@ class ElementLoader:
         return True
 
     def _load_expected_from_local(self):
-        """从本地 Excel 加载预期结果 sheet。"""
+        """从本地 Excel 加载预期结果 sheet（多模块格式：预期结果【模块名】）。"""
+        from boox_automation.core.config import test_case_sheets
+
         base = Path(__file__).parent.parent  # engine/ → boox_automation/
         xlsx = base / "data" / "elements.xlsx"
         if not xlsx.exists():
@@ -531,44 +583,57 @@ class ElementLoader:
 
         import openpyxl
         wb = openpyxl.load_workbook(xlsx)
-        if self._EXPECTED_SHEET not in wb.sheetnames:
-            logger.debug("本地 Excel 中无「预期结果」sheet，跳过")
-            wb.close()
-            return
+        modules = ["通用"] + test_case_sheets()
+        total_before = len(self._expected_results)
 
-        ws = wb[self._EXPECTED_SHEET]
-        rows = []
-        for row in ws.iter_rows(min_row=1, values_only=True):
-            rows.append([str(v) if v is not None else "" for v in row])
+        for module in modules:
+            sheet_name = f"预期结果【{module}】"
+            if sheet_name not in wb.sheetnames:
+                continue
+            ws = wb[sheet_name]
+            rows = []
+            for row in ws.iter_rows(min_row=1, values_only=True):
+                rows.append([str(v) if v is not None else "" for v in row])
+            self._parse_expected_rows(rows)
+
         wb.close()
-        self._parse_expected_rows(rows)
-        logger.info(f"已从本地 Excel 加载 {len(self._expected_results)} 个预期结果定义")
+        loaded = len(self._expected_results) - total_before
+        if loaded:
+            logger.info(
+                f"已从本地 Excel 加载 {loaded} 个预期结果定义 "
+                f"（模块: {', '.join(modules)}）"
+            )
 
     def _parse_expected_rows(self, rows: list[list[str]]):
-        """解析预期结果 sheet 行数据（4 列 A-D）。
+        """解析预期结果 sheet 行数据（5 列）。
 
-        列A: 元素标识 (key)
-        列B: 匹配文本 (match)
-        列C: 页面XML (content) — 从 Appium Inspector 导出，支持多设备「键：」分块
-        列D: 用途说明 (description)
+        新旧两种表头兼容：
+          旧: 元素标识 | 匹配文本 | 页面XML | 检查元素 | 用途说明
+          新: 模块 | 匹配文本 | 定位元素 | xml页面 | 用途说明
+          key = 模块 + "." + 匹配文本（新格式）/ 元素标识（旧格式）
         """
-        if len(rows) < 3:
+        if len(rows) < 2:
             return
 
-        headers = [str(c).strip() for c in rows[1]]  # 第2行为表头
+        h_idx = _find_header_row(rows)
+        headers = [str(c).strip() for c in rows[h_idx]]
         _EXPECTED_HEADER_MAP = {
             "元素标识": "key",
+            "模块": "key",          # 新格式：模块列
             "匹配文本": "match",
             "页面XML": "content",
+            "xml页面": "content",   # 新格式
             "检查元素": "element_checks",
+            "定位元素": "element_checks",  # 新格式
             "用途说明": "description",
         }
 
-        for row_idx_0, row in enumerate(rows[2:]):
+        for row_idx_0, row in enumerate(rows[h_idx + 1:]):
             if not row or not row[0]:
                 continue
 
             key = ""
+            key_part = ""  # 模块列值（新格式用）
             info: dict = {}
             for i, h in enumerate(headers):
                 val = str(row[i]).strip() if i < len(row) and row[i] else ""
@@ -577,7 +642,7 @@ class ElementLoader:
                 field = _EXPECTED_HEADER_MAP.get(h, h)
 
                 if field == "key":
-                    key = val
+                    key_part = val
                 elif field == "match":
                     info["match"] = val
                 elif field == "content":
@@ -587,8 +652,15 @@ class ElementLoader:
                 elif field == "description":
                     info["description"] = val
 
+            # key 拼接: 旧格式 A列含'.' = 完整key; 新格式 key=模块.匹配文本
+            match = info.get("match", "")
+            if key_part and "." not in key_part and match:
+                key = f"{key_part}.{match}"
+            else:
+                key = key_part
+
             if not key:
-                logger.warning(f"预期结果第{row_idx_0 + 3}行缺少「元素标识」，跳过")
+                logger.warning(f"预期结果第{row_idx_0 + h_idx + 2}行缺少 key（模块+匹配文本 或 元素标识），跳过")
                 continue
 
             if not info.get("content") and not info.get("element_checks"):
@@ -610,12 +682,15 @@ class ElementLoader:
         """按匹配文本查找预期结果 key，未匹配返回空字符串。"""
         return self._expected_match_index.get(tag, "")
 
-    # 中文表头 → 英文内部 key 映射（兼容中英文两种表头）
+    # 中文表头 → 英文内部 key 映射（兼容新旧两种表头）
     _HEADER_MAP = {
         "元素标识": "key",
+        "模块": "key",          # 新格式：模块列 = key 前缀，需与匹配文本拼接
         "匹配文本": "match",
         "定位方式": "locator",
+        "定位元素": "locator",  # 新格式：定位元素 = locator
         "操作类型": "action",
+        "操作": "action",       # 新格式：操作 = action
         "用途说明": "operation",
         "序号": "index",
     }
@@ -660,7 +735,7 @@ class ElementLoader:
         return info
 
     def _load_excel(self, xlsx_path: str):
-        """从 Excel 加载元素定义。每个 Sheet 对应一个页面。"""
+        """从 Excel 加载元素定义。自动检测表头行。"""
         import openpyxl
 
         wb = openpyxl.load_workbook(xlsx_path)
@@ -669,15 +744,26 @@ class ElementLoader:
         for sheet_name in wb.sheetnames:
             if sheet_name == "使用说明":
                 continue
+            if _EXPECTED_SHEET_MODULE_RE.match(sheet_name):
+                continue  # 预期结果 sheet 不加载为元素
             ws = wb[sheet_name]
-            headers = [str(c.value or "") for c in ws[2]]  # 标题在第2行（第1行是注释）
+            # 读取所有行（1-indexed → 0-indexed 列表）
+            all_rows = []
+            for row in ws.iter_rows(min_row=1, values_only=True):
+                all_rows.append([str(v) if v is not None else "" for v in row])
 
-            for row in ws.iter_rows(min_row=3, values_only=True):
-                row_vals = [str(v) if v is not None else "" for v in row]
+            if len(all_rows) < 2:
+                continue
+            h_idx = _find_header_row(all_rows)
+            headers = [h.strip() for h in all_rows[h_idx]]
+
+            for row_vals in all_rows[h_idx + 1:]:
                 if not row_vals or not row_vals[0]:
                     continue
 
-                key = row_vals[0].strip()
+                a_val = row_vals[0].strip()
+                b_val = row_vals[1].strip() if len(row_vals) > 1 else ""
+                key = a_val if "." in a_val or not b_val else f"{a_val}.{b_val}"
                 info = self._parse_row(row_vals, headers, key=key)
                 self._elements[key] = info
                 self._key_source[key] = f"{xlsx_path}::{sheet_name}"
@@ -802,6 +888,12 @@ class ElementMatcher:
                 if text != match:
                     self._index.setdefault(text, []).append(key)
 
+            # key 末段兜底: 桌面进入.书库首页 → 索引"书库首页"
+            if not match:
+                parts = key.rsplit(".", 1)
+                if len(parts) == 2 and parts[1]:
+                    self._index.setdefault(parts[1], []).append(key)
+
         logger.debug(f"元素索引构建完成: {len(loader._elements)} 个元素, {len(self._index)} 个索引词")
 
     # ---- 匹配逻辑 ----
@@ -810,11 +902,13 @@ class ElementMatcher:
              warn: bool = True) -> str:
         """根据【】标记文本查找 element_key。
 
-        匹配优先级：
-        1. 唯一精确匹配 → 直接返回
-        2. 多候选时按页面上下文评分排序，取最佳
-        3. 无精确匹配时尝试部分匹配
-        4. 都无则返回空
+        匹配优先级（方案 B）：
+        1. page_context.tag 精确查找（模块.匹配文本）
+        2. 通用.tag 回退查找
+        3. 反向索引精确匹配
+        4. 多候选时按页面上下文评分
+        5. 部分匹配
+        6. 都无则返回空
         """
         if not tag:
             return ""
@@ -822,18 +916,30 @@ class ElementMatcher:
         ctx = f" [{case_context}]" if case_context else ""
         elements = self._get_elements()
 
-        # 1. 精确匹配
+        # 1. 方案 B 快速路径：模块.匹配文本 直接查找
+        if page_context:
+            direct_key = f"{page_context}.{tag}"
+            if direct_key in elements:
+                return direct_key
+
+        # 2. 通用模块回退
+        if page_context != "通用":
+            fallback_key = f"通用.{tag}"
+            if fallback_key in elements:
+                return fallback_key
+
+        # 3. 反向索引精确匹配
         exact = self._index.get(tag, [])
         if len(exact) == 1:
             return exact[0]
 
-        # 2. 多候选 → 按页面上下文评分
+        # 4. 多候选 → 按页面上下文评分
         if len(exact) > 1:
             best = self._pick_best(tag, exact, page_context, ctx, warn)
             if best:
                 return best
 
-        # 3. 部分匹配
+        # 5. 部分匹配
         partial = [k for k, v in elements.items()
                    if tag in str(v.get("locator", ["", ""])[1])]
         if len(partial) == 1:

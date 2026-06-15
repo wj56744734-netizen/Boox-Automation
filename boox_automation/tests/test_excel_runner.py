@@ -140,42 +140,6 @@ def _parse_case_rows(rows: list[list[str]], priority_spec: str) -> list[ParsedCa
     return cases
 
 
-def _load_cases_from_cloud(sheets: list[str], priority_spec: str) -> list[ParsedCase]:
-    """从飞书电子表格加载用例（支持多个 sheet）。"""
-    from boox_automation.core.feishu import read_sheet_by_name
-    from boox_automation.core.config import feishu_test_case_token
-
-    token = feishu_test_case_token()
-    all_cases = []
-    for sheet in sheets:
-        rows = read_sheet_by_name(sheet, token)
-        if not rows:
-            logger.warning(f"飞书 sheet '{sheet}' 无数据")
-            continue
-        sheet_cases = _parse_case_rows(rows, priority_spec)
-        logger.info(f"飞书 sheet '{sheet}': {len(sheet_cases)} 条用例")
-        all_cases.extend(sheet_cases)
-    return all_cases
-
-
-def _load_cases_from_local(excel_path: str, sheets: list[str], priority_spec: str) -> list[ParsedCase]:
-    """从本地 Excel 加载用例（支持多个 sheet）。"""
-    wb = openpyxl.load_workbook(excel_path)
-    all_cases = []
-    for sheet in sheets:
-        if sheet not in wb.sheetnames:
-            logger.warning(f"本地 Sheet '{sheet}' 不存在，跳过")
-            continue
-        ws = wb[sheet]
-        rows = []
-        for row in ws.iter_rows(min_row=1, values_only=True):
-            rows.append([str(v) if v is not None else "" for v in row])
-        sheet_cases = _parse_case_rows(rows, priority_spec)
-        all_cases.extend(sheet_cases)
-    wb.close()
-    return all_cases
-
-
 def _load_cases(excel_path: str, sheets: list[str], priority_spec: str) -> list[ParsedCase]:
     """加载用例（缓存优先，云端刷新，本地兜底）。"""
     from boox_automation.core.feishu import (
@@ -184,7 +148,8 @@ def _load_cases(excel_path: str, sheets: list[str], priority_spec: str) -> list[
     )
 
     if use_local_excel():
-        return _load_cases_from_local(excel_path, sheets, priority_spec)
+        sheet_data = _read_local_sheets(excel_path, sheets)
+        return _parse_cases_from_sheets(sheet_data, sheets, priority_spec)
 
     # 1. 尝试云端
     if check_feishu_reachable():
@@ -213,7 +178,25 @@ def _load_cases(excel_path: str, sheets: list[str], priority_spec: str) -> list[
 
     # 3. 兜底本地 Excel
     logger.warning("无可用缓存，回退本地 Excel")
-    return _load_cases_from_local(excel_path, sheets, priority_spec)
+    sheet_data = _read_local_sheets(excel_path, sheets)
+    return _parse_cases_from_sheets(sheet_data, sheets, priority_spec)
+
+
+def _read_local_sheets(excel_path: str, sheets: list[str]) -> dict[str, list[list[str]]]:
+    """从本地 Excel 读取指定 sheet 的原始行数据。"""
+    wb = openpyxl.load_workbook(excel_path)
+    sheet_data = {}
+    for sheet in sheets:
+        if sheet not in wb.sheetnames:
+            logger.warning(f"本地 Sheet '{sheet}' 不存在，跳过")
+            continue
+        ws = wb[sheet]
+        rows = []
+        for row in ws.iter_rows(min_row=1, values_only=True):
+            rows.append([str(v) if v is not None else "" for v in row])
+        sheet_data[sheet] = rows
+    wb.close()
+    return sheet_data
 
 
 def _read_cloud_sheets(sheets: list[str]) -> dict[str, list[list[str]]]:
@@ -242,12 +225,6 @@ def _parse_cases_from_sheets(sheet_data: dict, sheets: list[str],
         logger.info(f"sheet '{sheet}': {len(sheet_cases)} 条用例")
         all_cases.extend(sheet_cases)
     return all_cases
-
-
-def _load_cases_from_cloud(sheets: list[str], priority_spec: str) -> list[ParsedCase]:
-    """从飞书电子表格加载用例（直接调用，不复用缓存逻辑）。"""
-    sheet_data = _read_cloud_sheets(sheets)
-    return _parse_cases_from_sheets(sheet_data, sheets, priority_spec)
 
 
 def _load_cases_from_cache(sheets: list[str], priority_spec: str) -> list | None:

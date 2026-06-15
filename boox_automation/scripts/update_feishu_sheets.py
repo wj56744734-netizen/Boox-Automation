@@ -1,29 +1,37 @@
-"""更新元素表所有 sheet 注释行为完整使用说明（6 列元素 + 5 列预期结果）。"""
-from boox_automation.core.feishu import get_sheet_id, write_sheet_values
-from boox_automation.core.config import feishu_elements_token
+"""更新元素表所有 sheet 注释行为完整使用说明（6 列元素 + 5 列预期结果）。
+
+模块名来自 test_case_sheets 配置，"通用"始终自动包含。
+"""
+import logging
+
+from boox_automation.core.feishu import get_sheet_id, write_sheet_values, list_sheet_names
+from boox_automation.core.config import feishu_elements_token, test_case_sheets
+
+logger = logging.getLogger(__name__)
 
 token = feishu_elements_token()
-element_sheets = ["手写笔记", "笔记首页", "无边笔记", "会议笔记", "文本笔记", "其他"]
+modules = ["通用"] + test_case_sheets()
 
-new_comments = [
-    # 1. 元素标识
+# ---- 元素表 6 列注释 ----
+
+element_comments = [
+    # 1. 模块 (A列)
     '\n'.join([
-        '元素唯一标识，格式: 页面名.元素名',
-        '• 页面名 = 当前 Sheet 名（如 笔记首页、手写笔记）',
-        '• 元素名 = 描述用途的名称（如 创建笔记、退出按钮）',
-        '• 全局唯一不可重复，否则后加载的覆盖先加载的',
-        '示例: 笔记首页.创建手写笔记',
+        '元素标识的前半部分，与匹配文本（B列）拼接 = 完整 key',
+        '• key 格式: 模块.匹配文本（如 笔记首页.创建笔记按钮）',
+        '• 模块 = 元素所属页面/功能区域（如 手写笔记、笔记首页）',
+        '• 同一模块内可重复（不同页面可有同名元素）',
+        '示例: 笔记首页',
     ]),
-    # 2. 匹配文本
+    # 2. 匹配文本 (B列)
     '\n'.join([
-        '测试步骤中【】内的匹配文字，用于自动关联步骤与元素',
+        '测试步骤中【】内的匹配文字，与模块（A列）拼接 = 元素标识',
         '• 必与步骤中的【】文字完全一致（含标点、空格）',
-        '• 同页面 match 不可重复，重复时靠页面上下文自动消歧',
-        '• 不填时自动用「定位方式」的纯文本值做匹配',
-        '• XPath 型定位方式必须填此字段',
-        '示例: 手写笔记（对应步骤「点击创建菜单中【手写笔记】」）',
+        '• 不同页面可有相同匹配文本，通过页面上下文自动消歧',
+        '• 不填时自动用「定位元素」的纯文本值做匹配',
+        '示例: 创建笔记按钮（对应步骤「点击【创建笔记按钮】」）',
     ]),
-    # 3. 定位方式
+    # 3. 定位元素 (C列)
     '\n'.join([
         '元素在界面上的定位表达式，支持 XPath 和纯文本两种写法:',
         '1) XPath 精确定位（推荐）:',
@@ -49,7 +57,7 @@ new_comments = [
         '',
         '常用 resource-id 前缀: com.onyx.android.note:id/ 或 com.onyx:id/',
     ]),
-    # 4. 操作类型
+    # 4. 操作 (D列)
     '\n'.join([
         '元素的操作语义，决定步骤执行时的具体行为（填写中文）:',
         '  点击         = 点击元素（默认值，按钮/菜单项/图标，可省略）',
@@ -62,16 +70,16 @@ new_comments = [
         '• 英文值兼容: click/input/long_press/assert_toast 仍可用',
         '• 页面/弹窗验证统一由 I 列预期结果完成',
     ]),
-    # 5. 用途说明
+    # 5. 用途说明 (E列)
     '\n'.join([
         '人类可读的元素描述，纯备注字段，不影响执行:',
         '• 出现在失败日志: 元素用途: xxx',
         '• 出现在 Allure 截图标题',
         '• 出现在步骤日志: 点击「xxx」',
         '建议简短描述在业务流程中的角色',
-        '示例: 退出手写笔记（手写笔记编辑页的返回按钮）',
+        '示例: 手写笔记编辑页的返回按钮',
     ]),
-    # 6. 序号
+    # 6. 序号 (F列)
     '\n'.join([
         '同页面同 match 出现多个元素时的序号',
         '• 1 = 第一个匹配的元素，2 = 第二个，以此类推',
@@ -81,35 +89,64 @@ new_comments = [
     ]),
 ]
 
-for sheet_name in element_sheets:
-    sid = get_sheet_id(token, sheet_name)
-    write_sheet_values(token, sid, start_row=1, start_col=1, values=[new_comments])
-    print(f"  OK {sheet_name}")
+all_sheets = list_sheet_names(token)
 
-# 预期结果 sheet — 5 列格式 (A-E)
+# 更新元素 sheet 注释行
+for module in modules:
+    if module not in all_sheets:
+        logger.warning(
+            "元素 sheet【%s】不存在，跳过。可用: %s",
+            module, sorted(all_sheets),
+        )
+        continue
+    sid = get_sheet_id(token, module)
+    write_sheet_values(token, sid, start_row=1, start_col=1, values=[element_comments])
+    print(f"  OK 元素/{module} (注释行)")
+
+# ---- 预期结果 5 列注释 ----
+
+exp_header = ["模块", "匹配文本", "定位元素", "xml页面", "用途说明"]
+
 exp_comments = [
-    # A: 元素标识
+    # A: 模块
     '\n'.join([
-        '预期结果唯一标识，格式: 页面.页面状态',
-        '• 页面 = 所属页面名（如 笔记首页、手写笔记）',
-        '• 状态 = 描述当前页面状态（如 引导页、创建页）',
-        '• 全局唯一不可重复',
-        '示例: 笔记首页.本地笔记引导',
+        '预期结果标识的前半部分，与匹配文本（B列）拼接 = 完整 key',
+        '• key 格式: 模块.匹配文本（如 手写笔记.创建页）',
+        '• 模块 = 所属页面名（如 手写笔记、笔记首页）',
+        '示例: 手写笔记',
     ]),
     # B: 匹配文本
     '\n'.join([
-        '用例 I 列步骤中【】内的匹配文字',
+        '用例 I 列步骤中【】内的匹配文字，与模块（A列）拼接 = key',
         '• 与 I 列的【】文字完全一致（含标点、空格）',
         '• 用于自动关联步骤与预期结果',
         '• I 列后缀（toast提示/toast不出现/不可见/不存在）不影响匹配',
-        '• 不可重复',
-        '示例: 本地笔记引导',
+        '示例: 创建页',
     ]),
-    # C: 页面XML
+    # C: 定位元素
+    '\n'.join([
+        'XPath 检查元素，每行一个选择器（旧称 检查元素 / D列）',
+        '• C/D 二选一，都填时 C 列优先执行',
+        '• 无需全页面 XML，只需列关键元素的 XPath',
+        '',
+        '格式（支持多设备「键：」分块）:',
+        '  //android.widget.TextView[@resource-id="com.onyx:id/title" and @text="手写笔记"]',
+        '',
+        '  国内：',
+        '  //android.widget.TextView[@resource-id="com.onyx:id/title" and @text="手写笔记"]',
+        '',
+        '  海外：',
+        '  //android.widget.TextView[@resource-id="com.onyx:id/title" and @text="Handwriting"]',
+        '',
+        '执行逻辑:',
+        '  visible 模式 — 所有 XPath 都能找到 → pass，任一找不到 → fail',
+        '  not_visible 模式 — 所有 XPath 都找不到 → pass，任一找到 → fail',
+    ]),
+    # D: xml页面
     '\n'.join([
         '页面 XML，从 Appium Inspector 导出后精简粘贴',
         '• 用脚本提取: python boox_automation/scripts/extract_page_xml.py',
-        '• C/D 二选一填写，都填时 D 列优先执行',
+        '• C/D 二选一填写，都填时 C 列（定位元素）优先执行',
         '',
         '填写方式（两种任选）:',
         '1) 内联文本 — 将 <hierarchy> XML 直接粘贴到单元格',
@@ -131,26 +168,6 @@ exp_comments = [
         '',
         '对比规则: 只比较 class + resource-id，text 差异仅 INFO 不阻塞',
     ]),
-    # D: 检查元素
-    '\n'.join([
-        '元素级 XPath 检查，每行一个 XPath 选择器',
-        '• C/D 二选一填写，都填时 D 列优先执行',
-        '• 无需全页面 XML，只需列关键元素的 XPath',
-        '',
-        '格式（支持多设备「键：」分块）:',
-        '  //android.widget.TextView[@resource-id="com.onyx:id/title" and @text="手写笔记"]',
-        '  //android.widget.TextView[@resource-id="com.onyx:id/title" and @text="无边笔记"]',
-        '',
-        '  国内：',
-        '  //android.widget.TextView[@resource-id="com.onyx:id/title" and @text="手写笔记"]',
-        '',
-        '  海外：',
-        '  //android.widget.TextView[@resource-id="com.onyx:id/title" and @text="Handwriting"]',
-        '',
-        '执行逻辑:',
-        '  visible 模式 — 所有 XPath 都能找到 → pass，任一找不到 → fail',
-        '  not_visible 模式 — 所有 XPath 都找不到 → pass，任一找到 → fail',
-    ]),
     # E: 用途说明
     '\n'.join([
         '人类可读的用途说明',
@@ -160,13 +177,19 @@ exp_comments = [
     ]),
 ]
 
-# 预期结果 5 列表头
-exp_header = ["元素标识", "匹配文本", "页面XML", "检查元素", "用途说明"]
-
-sid = get_sheet_id(token, "预期结果")
-write_sheet_values(token, sid, start_row=1, start_col=1, values=[exp_comments])
-print(f"  OK 预期结果 (注释行)")
-write_sheet_values(token, sid, start_row=2, start_col=1, values=[exp_header])
-print(f"  OK 预期结果 (表头行)")
+# 更新预期结果 sheet 注释行 + 表头
+for module in modules:
+    sheet_name = f"预期结果【{module}】"
+    if sheet_name not in all_sheets:
+        logger.warning(
+            "预期结果 sheet【%s】不存在，跳过。可用: %s",
+            sheet_name, sorted(all_sheets),
+        )
+        continue
+    sid = get_sheet_id(token, sheet_name)
+    write_sheet_values(token, sid, start_row=1, start_col=1, values=[exp_comments])
+    print(f"  OK 预期结果/{sheet_name} (注释行)")
+    write_sheet_values(token, sid, start_row=2, start_col=1, values=[exp_header])
+    print(f"  OK 预期结果/{sheet_name} (表头行)")
 
 print("\n注释行全部更新完成")
