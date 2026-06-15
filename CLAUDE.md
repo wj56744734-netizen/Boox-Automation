@@ -17,8 +17,9 @@ NOTE_TEST_MODULES=笔记首页,手写笔记 pytest boox_automation/tests/test_ex
 # 按标签跑（china / abroad / increment / full_amount）
 pytest -m "china and increment"
 
-# 带 Allure 报告
-python boox_automation/scripts/run_report.py
+# 飞书报告自动推送（测试结束后由 conftest 自动触发，无需手动调用）
+# 手动测试推送脚本
+python boox_automation/scripts/test_feishu_report.py
 
 # 仅生成报告不运行测试
 pytest --alluredir=boox_automation/artifacts/allure_results/test_$(date +%Y%m%d%H%M%S)
@@ -69,6 +70,7 @@ boox_automation/
 ├── core/                    基础设施
 │   ├── config.py            配置读取（config.yaml → 便捷函数）
 │   ├── feishu.py            飞书 API 客户端
+│   ├── feishu_report.py     飞书测试报告推送（测试结束自动触发）
 │   ├── health.py            Appium/ADB 健康检查
 │   ├── paths.py             产物路径管理
 │   └── cleanup.py           产物轮换清理
@@ -90,11 +92,12 @@ boox_automation/
 ├── tests/                   测试用例
 │   ├── test_excel_runner.py pytest 主入口
 │   ├── helpers.py           笔记业务流公共方法
-│   ├── test_file_import.py  文件导入测试
 │   └── performance/         性能测试
 │
 └── scripts/                 独立运行入口
-    └── run_report.py        Allure 报告入口
+    ├── extract_page_xml.py   页面 XML 提取
+    ├── test_feishu_report.py 飞书报告推送测试
+    └── update_feishu_sheets.py 飞书表格注释行同步
 ```
 
 ## 架构概览
@@ -128,7 +131,7 @@ tests/test_excel_runner  ← pytest 入口
 - **产物集中管理** (`core/paths.py` + `cleanup.py`)：运行时产物统一落到 `artifacts/`，session 结束自动保留最近 N 轮。
 - **无设备时干净退出** (`conftest.py`)：未检测到设备时打印提示后 `pytest.exit()`，PyCharm 测试树不出现红色节点。
 - **用例级重试** (`pytest.ini`)：集成 `pytest-rerunfailures`，失败用例自动重试 2 次。
-- **前置条件运行时检查**：条件检查在 `test_case` 执行时进行，使用当前真实设备信息。
+- **前置条件运行时检查**：条件检查在 `test_case` 执行时进行，使用当前真实设备信息。详见 [前置条件规范](#前置条件规范)。
 
 ## 配置体系
 
@@ -186,6 +189,70 @@ from boox_automation.core.config import timeout_default, retry_max_attempts
 - **新增 Python 测试用例**：放在 `tests/`，用 `@note_mark_china` / `@note_mark_increment` 等装饰器贴标签
 - **新增配置项**：加在 `config.yaml` + `core/config.py` 便捷函数
 - **新增用例模块**：在飞书用例表中新建 sheet，`config.yaml` 的 `feishu.test_case_sheets` 列表加一行
+
+## 前置条件规范
+
+前置条件在飞书用例表 G 列定义，可换行组合多条。解析逻辑在 `engine/parser.py:parse_preconditions()`。
+
+### 三种类型
+
+| 类型 | 说明 | runtime 行为 |
+|---|---|---|
+| `condition` | 按设备属性筛选，不满足则跳过用例 | `check_conditions()` 设备信息比对 |
+| `cleanup` | 用例执行前清理环境 | `conftest.py:note_test_initial` fixture setup 阶段执行 |
+| `descriptive` | 人类可读说明，不影响执行 | 无操作 |
+
+### 条件型（condition）
+
+| 写法 | 判断字段 | 逻辑 |
+|---|---|---|
+| `【国内设备执行】` | `device_region` = `国内` | 仅国内设备执行 |
+| `【海外设备执行】` | `device_region` ∈ `{海外, 全球}` | 仅海外/全球设备执行 |
+| `【平板设备执行】` | `devices_reader` = `平板` | 仅平板执行 |
+| `【阅读器设备执行】` | `devices_reader` = `阅读器` | 仅阅读器执行 |
+| `【黑白设备执行】` | `driver_colour` = `黑白` | 仅黑白屏执行 |
+| `【彩色设备执行】` | `driver_colour` = `彩色` | 仅彩色屏执行 |
+| `【4.2.0-版本执行】` | 固件版本 ≥ 4.2.0 | `_check_version()` 元组逐位比较 |
+
+**版本检查**：通过 `_parse_version()` 拆为 `tuple[int, ...]` 后元组比较。**dev / userdebug 等非标准版本号视为最高固件，所有版本条件全部通过**。
+
+**设备信息来源**：`devices/info.py:Device_basic_information.get_device_info()`，字段来自 ADB 指纹解析 + `devices/models/` YAML 配置。
+
+### 清理型（cleanup）
+
+| 写法 | 执行动作 | 相关配置 |
+|---|---|---|
+| `【清理应用数据】` | `adb shell pm clear` 指定包名 | `config.yaml: cleanup.app_data_packages` |
+| `【清理存储文件】` | `adb shell rm -rf` 指定路径 | `config.yaml: cleanup.storage_clean_paths` |
+
+清理在 `conftest.py:note_test_initial` fixture 的 setup 阶段执行，**不可逆**。默认不清理，仅当前置条件中显式声明时触发。非 Excel 用例可通过 `@pytest.mark.cleanup_app_data` / `@pytest.mark.cleanup_storage_files` 标记控制。
+
+### 描述型（descriptive）
+
+不含可识别 `【】` 标记的行（如 `1. 新设备未登录过账号`）或含 `【】` 但不匹配任何关键字的内容，归类为描述型，仅作文档用途。
+
+### 解析流程
+
+```
+parse_preconditions(G列表格文本)
+  → _TAG_RE.findall() 提取每行【】内容
+     → 1. 匹配 _CONDITION_KEYWORDS  → type="condition"
+     → 2. 匹配 _VERSION_COND_RE    → type="condition", kind="version"
+     → 3. 匹配清理关键字           → type="cleanup"
+     → 4. 均不匹配                 → type="descriptive"
+```
+
+### 运行时检查流程
+
+```
+test_excel_runner.py:test_case()
+  → _get_device_info_safe()            # devices/info.py 获取设备信息
+  → check_conditions(case.preconditions, device_info)  # 逐条检查
+     → _check_one()                    # 关键字条件: eq / in 比对
+     → _check_version()                # 版本条件: 元组 ≥ 比较
+  → 不满足 → pytest.skip(reason)
+  → 满足   → note_test_initial fixture → cleanup 清理 → 执行用例
+```
 
 ## 元素表规范
 

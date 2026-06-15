@@ -79,11 +79,11 @@ class ParsedStep:
 
 @dataclass
 class Precondition:
-    """前置条件 — 条件型/变量型/描述型。"""
+    """前置条件 — 条件型/清理型/描述型。"""
     raw: str  # 原始文本内容（不含"前置条件【】"外壳）
-    type: str  # "condition" | "variable" | "descriptive"
-    kind: str = ""  # 条件型: 条件名  变量型: 变量键
-    value: str = ""  # 变量型: 变量值
+    type: str  # "condition" | "cleanup" | "descriptive"
+    kind: str = ""  # 条件型: 条件名  清理型: 清理类型
+    value: str = ""  # 清理型: 操作参数
     operator: str = ""  # "eq" | "ge" | "in"
     expected: str = ""  # 期望值（条件型用）
     skip_reason: str = ""  # 不满足时的原因
@@ -96,7 +96,6 @@ class ParsedCase:
     module: str
     steps: list[ParsedStep] = field(default_factory=list)
     preconditions: list[Precondition] = field(default_factory=list)
-    variables: dict[str, str] = field(default_factory=dict)
     expected_pages: list[ExpectedPageRef] = field(default_factory=list)
     row_number: int = 0
     skip_reason: str = ""  # 前置条件不满足时的跳过原因
@@ -142,19 +141,18 @@ def parse_steps(raw_text: str) -> list[ParsedStep]:
     return steps
 
 
-def parse_preconditions(raw_text: str | None) -> tuple[list[Precondition], dict[str, str]]:
-    """解析前置条件列，返回 (条件列表, 变量映射)。"""
+def parse_preconditions(raw_text: str | None) -> list[Precondition]:
+    """解析前置条件列，返回条件列表。"""
     if not raw_text:
-        return [], {}
+        return []
 
     text = str(raw_text).strip()
     if not text:
-        return [], {}
+        return []
 
     lines = [l.strip() for l in text.split("\n") if l.strip()]
 
     preconditions: list[Precondition] = []
-    variables: dict[str, str] = {}
 
     for line in lines:
         # 提取所有【】内容
@@ -203,28 +201,10 @@ def parse_preconditions(raw_text: str | None) -> tuple[list[Precondition], dict[
             ))
             continue
 
-        # 4. 变量型 — 输入键-值
-        if content.startswith("输入"):
-            inner = content[2:]
-            dash_idx = inner.find("-")
-            if dash_idx > 0:
-                key = inner[:dash_idx]
-                val = inner[dash_idx + 1:]
-                variables[key] = val
-                preconditions.append(Precondition(
-                    raw=content,
-                    type="variable",
-                    kind=key,
-                    value=val,
-                ))
-                continue
-            preconditions.append(Precondition(raw=content, type="descriptive"))
-            continue
-
-        # 5. 描述型（保留完整行文本，【】只是内联引用非条件关键字）
+        # 4. 描述型（保留完整行文本，【】只是内联引用非条件关键字）
         preconditions.append(Precondition(raw=line, type="descriptive"))
 
-    return preconditions, variables
+    return preconditions
 
 
 def has_cleanup(preconditions: list, kind: str) -> bool:
@@ -303,11 +283,11 @@ def _check_one(pc, device_info: dict) -> bool:
 
 
 def _check_version(pc, device_info: dict) -> bool:
-    """检查固件版本 >= 期望版本。"""
+    """检查固件版本 >= 期望版本。dev/非标版本视为最高，全通过。"""
     actual_str = str(device_info.get("version_info", ""))
     match = re.search(r"(\d+\.\d+\.\d+)", actual_str)
     if not match:
-        return False
+        return True  # dev / userdebug 等非标版本，视为最高固件，全通过
 
     actual_ver = _parse_version(match.group(1))
     expected_ver = _parse_version(pc.expected)

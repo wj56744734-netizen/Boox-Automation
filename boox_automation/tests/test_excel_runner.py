@@ -7,7 +7,6 @@
 """
 from __future__ import annotations
 import logging
-import re
 from pathlib import Path
 import allure
 import pytest
@@ -72,7 +71,7 @@ def _parse_case_rows(rows: list[list[str]], priority_spec: str) -> list[ParsedCa
         if not title or not steps_text:
             continue
 
-        preconditions, variables = parse_preconditions(precondition_text)
+        preconditions = parse_preconditions(precondition_text)
         expected_results = parse_expected_results(expected_text)
 
         case = ParsedCase(
@@ -82,7 +81,6 @@ def _parse_case_rows(rows: list[list[str]], priority_spec: str) -> list[ParsedCa
             row_number=row1,
             steps=parse_steps(str(steps_text).strip()),
             preconditions=preconditions,
-            variables=variables,
             expected_pages=expected_results,
         )
 
@@ -116,7 +114,7 @@ def _parse_case_rows(rows: list[list[str]], priority_spec: str) -> list[ParsedCa
                 if ep.check_mode in ('visible', 'not_visible'):
                     ep.expected_key = _loader.match_expected_result(ep.tag)
                     if not ep.expected_key:
-                        logger.warning(f"R{row1} 预期结果【{ep.tag}】未在预期结果 sheet 中匹配")
+                        logger.debug(f"R{row1} 预期结果【{ep.tag}】未在预期结果 sheet 中匹配")
                 # toast: 直接使用 tag 作为预期文本，不查 sheet
                 else:
                     ep.expected_key = '__toast__'
@@ -327,7 +325,7 @@ class TestExcelRunner:
                 for step in steps:
                     clear_element_ctx()
                     set_step_context(f"R{case.row_number} 步骤{step.seq}")
-                    _dispatch_step(self.method, self.public, step, case.variables)
+                    _dispatch_step(self.method, self.public, step)
                     step.status = "pass"
                     clear_step_context()
                     # 检查步骤 → 按 tag 关联到预期结果
@@ -367,10 +365,9 @@ class TestExcelRunner:
         logger.info(f"用例汇总: 通过={summary['pass']}, 不通过={summary['fail']}, 跳过={summary['skip']}")
 
 
-def _dispatch_step(method, public, step, variables: dict[str, str] | None = None):
+def _dispatch_step(method, public, step):
     """根据 action 类型分发执行。"""
     ek = step.element_key
-    vars_ = variables or {}
 
     if step.action == "click":
         method.xpath_text_click(element_key=ek)
