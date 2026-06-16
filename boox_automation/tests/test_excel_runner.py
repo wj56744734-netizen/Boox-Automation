@@ -149,11 +149,13 @@ def _load_cases(excel_path: str, sheets: list[str], priority_spec: str) -> list[
     )
 
     if use_local_excel():
+        logger.debug("用例加载路径: 本地 Excel（USE_LOCAL_EXCEL=1）")
         sheet_data = _read_local_sheets(excel_path, sheets)
         return _parse_cases_from_sheets(sheet_data, sheets, priority_spec)
 
     # 1. 尝试云端
     if check_feishu_reachable():
+        logger.debug(f"用例加载路径: 飞书云端（目标工作表: {', '.join(sheets)}）")
         try:
             sheet_data = _read_cloud_sheets(sheets)
             save_cache({"sheets": sheet_data}, "test_cases")
@@ -167,6 +169,7 @@ def _load_cases(excel_path: str, sheets: list[str], priority_spec: str) -> list[
             )
 
     # 2. 云端不可用 → 缓存兜底
+    logger.debug("用例加载路径: 本地缓存")
     cached = _load_cases_from_cache(sheets, priority_spec)
     if cached is not None:
         age = get_cache_age("test_cases")
@@ -178,6 +181,7 @@ def _load_cases(excel_path: str, sheets: list[str], priority_spec: str) -> list[
         return cached
 
     # 3. 兜底本地 Excel
+    logger.debug("用例加载路径: 本地 Excel（兜底）")
     logger.warning("无可用缓存，回退本地 Excel")
     sheet_data = _read_local_sheets(excel_path, sheets)
     return _parse_cases_from_sheets(sheet_data, sheets, priority_spec)
@@ -215,7 +219,7 @@ def _read_cloud_sheets(sheets: list[str]) -> dict[str, list[list[str]]]:
 
 def _parse_cases_from_sheets(sheet_data: dict, sheets: list[str],
                               priority_spec: str) -> list[ParsedCase]:
-    """从原始行数据解析用例列表（解析→过滤→匹配元素）。"""
+    """从原始行数据解析用例列表（解析→筛选→匹配元素）。"""
     all_cases = []
     for sheet in sheets:
         rows = sheet_data.get(sheet, [])
@@ -224,9 +228,18 @@ def _parse_cases_from_sheets(sheet_data: dict, sheets: list[str],
             continue
         # 1. 文本解析（快速，无元素匹配）
         sheet_cases = _parse_case_rows(rows)
-        logger.debug(f"工作表「{sheet}」: 解析 {len(sheet_cases)} 条用例")
+        logger.debug(f"工作表「{sheet}」: 阶段1 文本解析 → {len(sheet_cases)} 条用例")
         # 2. 优先级 + 模块筛选
+        before_filter = len(sheet_cases)
         sheet_cases = _apply_filters(sheet_cases, priority_spec)
+        filtered = before_filter - len(sheet_cases)
+        if filtered:
+            logger.debug(
+                f"工作表「{sheet}」: 阶段2 筛选 → 过滤 {filtered} 条，"
+                f"剩余 {len(sheet_cases)} 条（优先级={priority_spec}）"
+            )
+        else:
+            logger.debug(f"工作表「{sheet}」: 阶段2 筛选 → 无需过滤，保留全部 {len(sheet_cases)} 条")
         # 3. 只对筛选后的用例做元素匹配
         sheet_cases = _resolve_case_elements(sheet_cases)
         executable = sum(1 for c in sheet_cases if any(s.element_key for s in c.steps))
@@ -255,8 +268,15 @@ def _make_case_id(case: ParsedCase) -> str:
 
 # ── 用例收集 ──
 from boox_automation.core.config import test_case_sheets
+from boox_automation.core.feishu import use_local_excel
+_sheets = test_case_sheets()
+logger.debug(
+    f"用例收集配置: 目标工作表={_sheets}, "
+    f"优先级筛选={PRIORITY_FILTER}, "
+    f"本地模式={'是' if use_local_excel() else '否'}"
+)
 logger.info("── 开始收集用例 ──")
-_all_cases = _load_cases(EXCEL_FILE, test_case_sheets(), PRIORITY_FILTER)
+_all_cases = _load_cases(EXCEL_FILE, _sheets, PRIORITY_FILTER)
 _executable = [c for c in _all_cases if any(s.element_key for s in c.steps)]
 _executable.sort(key=lambda c: (_PRIORITY_ORDER.get(c.priority, 99), c.row_number))
 _skipped = len(_all_cases) - len(_executable)
@@ -264,6 +284,20 @@ logger.info(
     "── 收集完成: %d 条用例（%d 可执行, %d 跳过）──",
     len(_all_cases), len(_executable), _skipped,
 )
+
+# 无可执行用例时，pytest parametrize 空列表会产生 NOTSET 占位符
+# 填入一条带 skip_reason 的哨兵用例，显示为中文跳过
+if not _executable:
+    _no_case = ParsedCase(
+        title="无可执行用例",
+        priority="",
+        module="",
+        steps=[],
+        preconditions=[],
+        expected_pages=[],
+    )
+    _no_case.skip_reason = "无可执行用例：所有用例均未通过筛选或元素匹配"
+    _executable = [_no_case]
 
 
 @allure.feature("Excel驱动测试")
@@ -276,6 +310,11 @@ class TestExcelRunner:
     @pytest.mark.parametrize("case", _executable, ids=_make_case_id)
     def test_case(self, note_test_initial, case):
         """Excel 用例 — 每条独立执行，环境自动清理。"""
+
+        # 哨兵用例：无可执行用例时的占位，直接跳过
+        if case.skip_reason and not case.steps and not case.expected_pages:
+            pytest.skip(case.skip_reason)
+
         case_id = f"R{case.row_number} [{case.priority}] {case.title}"
         logger.info(f"⏐ START  {case_id}")
 
@@ -294,7 +333,18 @@ class TestExcelRunner:
                 s.status = "skip"
             pytest.skip(validation_skip)
 
-        # I 列为空 → WARNING
+        # 检查步骤（action=skip）必须配合 I 列预期结果，缺失时直接中断
+        check_steps = [s for s in case.steps if s.action == "skip" and s.tag]
+        if check_steps and not case.expected_pages:
+            check_tags = '、'.join(s.tag for s in check_steps)
+            raise AssertionError(
+                f"R{case.row_number}「{case.title}」"
+                f"包含 {len(check_steps)} 个检查步骤（{check_tags}），"
+                f"但用例表I列（预期结果列）为空。"
+                f"请在I列中添加对应的【】标记。"
+            )
+
+        # I 列为空 → WARNING（无检查步骤时的提醒）
         if not case.expected_pages:
             logger.warning(f"R{case.row_number} [{case.title}] 无预期结果，缺少断言")
 
@@ -413,8 +463,8 @@ def _check_expected_by_tag(method, expected_by_tag: dict, consumed: dict, step, 
         available_hint = '、'.join(available_tags) if available_tags else '(I列无可解析的预期结果)'
         case_info = f"R{row}「{title}」" if row else ""
         raise AssertionError(
-            f"{case_info} 步骤{step.seq}：检查【{tag}】未在用例表I列（预期结果列）中找到匹配\n"
-            f"  I列已有的【】标记: {available_hint}"
+            f"{case_info} 步骤{step.seq}：检查【{tag}】在用例表I列中未定义预期结果。\n"
+            f"  请在I列添加【{tag}】行，当前I列已有的【】标记: {available_hint}"
         )
 
     idx = consumed.get(tag, 0)
@@ -431,11 +481,56 @@ def _check_expected_by_tag(method, expected_by_tag: dict, consumed: dict, step, 
 
     if not ep.expected_key:
         ep.status = "fail"
-        raise AssertionError(
-            f"步骤{step.seq}：检查【{tag}】在预期结果工作表中未找到匹配。"
-            f"请确认预期结果 sheet（如「预期结果【笔记】」）的 B 列（匹配文本）"
-            f"包含与 I 列【{tag}】完全一致的文字"
-        )
+        from boox_automation.engine.elements import get_element_loader
+        loader = get_element_loader()
+        diag = loader.get_expected_diagnostics()
+
+        modules = diag.get("modules", [])
+        found = diag.get("sheets_found", [])
+        missing = diag.get("sheets_missing", [])
+        match_index = diag.get("match_index", {})
+        total = diag.get("total_results", 0)
+
+        searched = [f"预期结果【{m}】" for m in modules] if modules else ["(未搜索任何模块)"]
+        module_hint = (modules[1] if len(modules) > 1 else (modules[0] if modules else "模块名"))
+
+        if total == 0 and not found:
+            # 情况A：完全没有加载到任何预期结果工作表
+            missing_str = '、'.join(missing) if missing else '、'.join(searched)
+            raise AssertionError(
+                f"步骤{step.seq}：检查【{tag}】已关联到用例I列，但未加载到任何预期结果工作表。\n"
+                f"──────────────────────────────────────────────────\n"
+                f"  原因: 飞书元素表中不存在以下预期结果工作表:\n"
+                + "\n".join(f"    {s} → 缺失" for s in searched) + "\n"
+                f"  ────────────────────────────────────────────────\n"
+                f"  解决方式:\n"
+                f"    1. 在飞书元素表中新建「预期结果【{module_hint}】」工作表\n"
+                f"       表头: 模块 | 匹配文本 | 定位元素 | xml页面 | 用途说明\n"
+                f"       数据行: {module_hint} | {tag} | (XPath或留空) | (XML或留空) | (说明)\n"
+                f"    2. 或将预期页面 XML 放入本地文件:\n"
+                f"       data/expected_pages/{module_hint}.{tag}.xml\n"
+                f"──────────────────────────────────────────────────"
+            )
+        else:
+            # 情况B：有预期结果工作表，但 B 列未匹配
+            found_str = '、'.join(found) if found else "无"
+            index_str = '、'.join(sorted(match_index.keys())) if match_index else "(空)"
+            raise AssertionError(
+                f"步骤{step.seq}：检查【{tag}】已关联到用例I列，但在预期结果工作表的 B 列中未找到匹配。\n"
+                f"──────────────────────────────────────────────────\n"
+                f"  已加载预期结果工作表: {found_str}\n"
+                f"  已加载预期结果条目: {total}\n"
+                f"  当前 B 列已有匹配文本({len(match_index)}条): {index_str}\n"
+                f"  未匹配的文本: 【{tag}】\n"
+                f"  ────────────────────────────────────────────────\n"
+                f"  解决方式:\n"
+                f"    在「预期结果【{module_hint}】」工作表中新增一行:\n"
+                f"    B 列（匹配文本）: {tag}\n"
+                f"    C 列（定位元素）: 填入对应 XPath\n"
+                f"    D 列（xml页面）: 填入 Appium Inspector 导出的页面 XML\n"
+                f"    注意: B 列文字必须与 I 列【{tag}】完全一致\n"
+                f"──────────────────────────────────────────────────"
+            )
 
     try:
         _dispatch_expected_page(method, ep)

@@ -221,7 +221,7 @@ def adb_cleanup_app_data_packages() -> list[str]:
         return [p.strip() for p in env.split(",") if p.strip()]
     pkgs = get("adb.cleanup.app_data.packages")
     if isinstance(pkgs, list):
-        return [str(p) for p in pkgs]
+        return [str(p) for p in pkgs if p]
     return ["com.onyx.android.note", "com.onyx.android.ksync", "com.onyx"]
 
 
@@ -232,7 +232,7 @@ def adb_cleanup_storage_paths() -> list[str]:
         return [p.strip() for p in env.split(",") if p.strip()]
     paths = get("adb.cleanup.storage_files.paths")
     if isinstance(paths, list):
-        return [str(p) for p in paths]
+        return [str(p) for p in paths if p]
     return ["/sdcard/note/*"]
 
 

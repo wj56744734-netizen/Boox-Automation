@@ -118,7 +118,7 @@ def pytest_collection_modifyitems(config, items):
         config.hook.pytest_deselected(items=deselected)
         items[:] = selected
         logging.warning(
-            f"[IGNORE] 按规则忽略用例 {len(deselected)} 条，剩余 {len(selected)} 条；规则：{patterns}"
+            f"[筛选跳过] 按规则忽略用例 {len(deselected)} 条，剩余 {len(selected)} 条；规则：{patterns}"
         )
 
 

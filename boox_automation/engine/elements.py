@@ -349,6 +349,10 @@ class ElementLoader:
         self._key_source: dict = {}  # element_key → sheet name
         self._expected_results: dict = {}      # key → expected page info
         self._expected_match_index: dict = {}  # match文本 → key
+        # 诊断信息：记录预期结果加载过程
+        self._expected_modules: list[str] = []
+        self._expected_sheets_found: list[str] = []
+        self._expected_sheets_missing: list[str] = []
         self._auto_discover()
 
     def _auto_discover(self):
@@ -359,12 +363,14 @@ class ElementLoader:
         )
 
         if use_local_excel():
+            logger.debug("元素加载路径: 本地 Excel（USE_LOCAL_EXCEL=1）")
             self._load_from_local_xlsx()
             self._load_expected_results()
             return
 
         # 1. 尝试云端
         if check_feishu_reachable():
+            logger.debug("元素加载路径: 飞书云端")
             try:
                 self._load_from_cloud()
                 self._save_to_cache()
@@ -379,6 +385,7 @@ class ElementLoader:
                 )
 
         # 2. 云端不可用 → 缓存兜底
+        logger.debug("元素加载路径: 本地缓存")
         if self._load_from_cache():
             age = get_cache_age("elements")
             logger.warning(
@@ -390,6 +397,7 @@ class ElementLoader:
             return
 
         # 3. 兜底本地 Excel
+        logger.debug("元素加载路径: 本地 Excel（兜底）")
         logger.warning("无可用缓存，回退本地 Excel")
         self._load_from_local_xlsx()
         self._load_expected_results()
@@ -488,30 +496,53 @@ class ElementLoader:
         from boox_automation.core.feishu import use_local_excel
 
         if use_local_excel():
+            logger.debug("预期结果加载路径: 本地 Excel（USE_LOCAL_EXCEL=1）")
             self._load_expected_from_local()
+        else:
+            loaded = False
+            try:
+                from boox_automation.core.feishu import check_feishu_reachable
+                if check_feishu_reachable():
+                    logger.debug("预期结果加载路径: 飞书云端")
+                    try:
+                        self._load_expected_from_cloud()
+                        if self._expected_results:
+                            self._save_expected_to_cache()
+                            logger.info("预期结果来源: 飞书云端（已更新本地缓存）")
+                            loaded = True
+                    except Exception:
+                        logger.warning(
+                            "飞书云端加载预期结果失败，回退缓存",
+                            exc_info=True,
+                        )
+            except Exception:
+                pass
+
+            if not loaded:
+                logger.debug("预期结果加载路径: 本地缓存")
+                if self._load_expected_from_cache():
+                    logger.warning("预期结果来源: 本地缓存")
+                    loaded = True
+
+            if not loaded:
+                logger.debug("预期结果加载路径: 本地 Excel（兜底）")
+                self._load_expected_from_local()
+
+        self._ensure_expected_loaded()
+
+    def _ensure_expected_loaded(self):
+        """确保至少加载到一个预期结果工作表，否则中断测试。"""
+        if self._expected_results:
             return
-
-        try:
-            from boox_automation.core.feishu import check_feishu_reachable
-            if check_feishu_reachable():
-                try:
-                    self._load_expected_from_cloud()
-                    self._save_expected_to_cache()
-                    logger.info("预期结果来源: 飞书云端（已更新本地缓存）")
-                    return
-                except Exception:
-                    logger.warning(
-                        "飞书云端加载预期结果失败，回退缓存",
-                        exc_info=True,
-                    )
-        except Exception:
-            pass
-
-        if self._load_expected_from_cache():
-            logger.warning("预期结果来源: 本地缓存")
-            return
-
-        self._load_expected_from_local()
+        modules = self._expected_modules or ["(未知)"]
+        searched = '、'.join(f"预期结果【{m}】" for m in modules)
+        raise RuntimeError(
+            f"未加载到任何预期结果工作表，测试中断。\n"
+            f"已搜索: {searched}\n"
+            f"请确认飞书元素表（或本地 elements.xlsx）中已创建对应的预期结果工作表。\n"
+            f"格式: 工作表名 = 预期结果【模块名】（如 预期结果【阅读】），"
+            f"表头: 模块 | 匹配文本 | 定位元素 | xml页面 | 用途说明"
+        )
 
     def _load_expected_from_cloud(self):
         """从飞书加载预期结果 sheet（多模块格式：预期结果【模块名】）。"""
@@ -519,27 +550,63 @@ class ElementLoader:
         from boox_automation.core.config import feishu_elements_token, test_case_sheets
 
         token = feishu_elements_token()
-        modules = ["通用"] + test_case_sheets()
+        modules = test_case_sheets()
+        self._expected_modules = modules
+        self._expected_sheets_found = []
+        self._expected_sheets_missing = []
+
         all_sheets = list_sheet_names(token)
+        logger.debug(
+            f"飞书元素表共有 {len(all_sheets)} 个工作表: "
+            f"{', '.join(all_sheets)}"
+        )
+        logger.debug(
+            f"预期结果搜索模块列表: {', '.join(modules)}"
+        )
+
         total_before = len(self._expected_results)
 
         for module in modules:
             sheet_name = f"预期结果【{module}】"
             if sheet_name not in all_sheets:
+                self._expected_sheets_missing.append(sheet_name)
+                logger.warning(
+                    f"预期结果工作表「{sheet_name}」不存在，"
+                    f"请确认飞书元素表中已创建该工作表。"
+                    f"当前可选工作表: {', '.join(all_sheets)}"
+                )
                 continue
             rows = read_sheet_by_name(sheet_name, token)
             if not rows or len(rows) < 2:
+                logger.warning(
+                    f"预期结果工作表「{sheet_name}」无数据，"
+                    f"请确认该工作表中已填入预期结果定义（至少需要表头行 + 1 行数据）"
+                )
                 continue
             self._parse_expected_rows(rows)
+            self._expected_sheets_found.append(sheet_name)
+            logger.debug(
+                f"已解析预期结果工作表「{sheet_name}」: "
+                f"{len(rows) - 1} 行数据"
+            )
 
         loaded = len(self._expected_results) - total_before
         if loaded:
+            found_str = '、'.join(self._expected_sheets_found)
+            missing_str = '、'.join(self._expected_sheets_missing) if self._expected_sheets_missing else '无'
             logger.debug(
-                f"已从飞书加载 {loaded} 个预期结果定义 "
-                f"（模块: {', '.join(modules)}）"
+                f"飞书预期结果加载完成: 共 {loaded} 个定义"
+                f"（找到工作表: {found_str}"
+                f"；缺失工作表: {missing_str}）"
             )
         else:
-            logger.debug("飞书中无模块化预期结果工作表，跳过")
+            missing_str = '、'.join(self._expected_sheets_missing)
+            logger.warning(
+                f"飞书中未找到任何预期结果工作表。"
+                f"已搜索: {', '.join(f'预期结果【{m}】' for m in modules)}，"
+                f"均不存在。"
+                f"可选工作表: {', '.join(all_sheets)}"
+            )
 
     def _save_expected_to_cache(self):
         """将预期结果数据保存到本地缓存。"""
@@ -562,7 +629,13 @@ class ElementLoader:
             return False
         self._expected_results.update(er_data)
         self._expected_match_index.update(match_idx)
-        logger.debug(f"已从缓存加载 {len(er_data)} 个预期结果定义")
+        self._expected_sheets_found = ["(缓存)"]
+        self._expected_sheets_missing = []
+        logger.debug(
+            f"已从缓存加载 {len(er_data)} 个预期结果定义，"
+            f"匹配索引 {len(match_idx)} 条: "
+            f"{', '.join(sorted(match_idx.keys()))}"
+        )
         return True
 
     def _load_expected_from_local(self):
@@ -572,30 +645,60 @@ class ElementLoader:
         base = Path(__file__).parent.parent  # engine/ → boox_automation/
         xlsx = base / "data" / "elements.xlsx"
         if not xlsx.exists():
-            logger.debug("elements.xlsx 不存在，跳过预期结果加载")
+            logger.debug("本地 elements.xlsx 不存在，跳过预期结果加载")
             return
 
         import openpyxl
         wb = openpyxl.load_workbook(xlsx)
-        modules = ["通用"] + test_case_sheets()
+        modules = test_case_sheets()
+        self._expected_modules = modules
+        self._expected_sheets_found = []
+        self._expected_sheets_missing = []
+
+        logger.debug(
+            f"本地元素表共有 {len(wb.sheetnames)} 个工作表: "
+            f"{', '.join(wb.sheetnames)}"
+        )
+        logger.debug(
+            f"预期结果搜索模块列表: {', '.join(modules)}"
+        )
+
         total_before = len(self._expected_results)
 
         for module in modules:
             sheet_name = f"预期结果【{module}】"
             if sheet_name not in wb.sheetnames:
+                self._expected_sheets_missing.append(sheet_name)
+                logger.warning(
+                    f"预期结果工作表「{sheet_name}」不存在，"
+                    f"请确认本地 elements.xlsx 中已创建该工作表。"
+                    f"当前可选工作表: {', '.join(wb.sheetnames)}"
+                )
                 continue
             ws = wb[sheet_name]
             rows = []
             for row in ws.iter_rows(min_row=1, values_only=True):
                 rows.append([str(v) if v is not None else "" for v in row])
             self._parse_expected_rows(rows)
+            self._expected_sheets_found.append(sheet_name)
+            logger.debug(
+                f"已解析预期结果工作表「{sheet_name}」: "
+                f"{len(rows)} 行"
+            )
 
         wb.close()
         loaded = len(self._expected_results) - total_before
         if loaded:
+            found_str = '、'.join(self._expected_sheets_found)
             logger.info(
                 f"已从本地 Excel 加载 {loaded} 个预期结果定义 "
-                f"（模块: {', '.join(modules)}）"
+                f"（工作表: {found_str}）"
+            )
+        else:
+            missing_str = '、'.join(self._expected_sheets_missing)
+            logger.warning(
+                f"本地 Excel 中未找到任何预期结果工作表。"
+                f"已搜索: {', '.join(f'预期结果【{m}】' for m in modules)}"
             )
 
     def _parse_expected_rows(self, rows: list[list[str]]):
@@ -674,7 +777,24 @@ class ElementLoader:
 
     def match_expected_result(self, tag: str) -> str:
         """按匹配文本查找预期结果 key，未匹配返回空字符串。"""
-        return self._expected_match_index.get(tag, "")
+        result = self._expected_match_index.get(tag, "")
+        if not result:
+            logger.debug(
+                f"预期结果匹配失败: 匹配文本「{tag}」未在索引中找到。"
+                f"当前索引共 {len(self._expected_match_index)} 条: "
+                f"{', '.join(sorted(self._expected_match_index.keys())) if self._expected_match_index else '(空)'}"
+            )
+        return result
+
+    def get_expected_diagnostics(self) -> dict:
+        """获取预期结果加载的诊断信息，用于错误报告。"""
+        return {
+            "modules": self._expected_modules,
+            "sheets_found": self._expected_sheets_found,
+            "sheets_missing": self._expected_sheets_missing,
+            "match_index": dict(self._expected_match_index),
+            "total_results": len(self._expected_results),
+        }
 
     # 中文表头 → 英文内部 key 映射（兼容新旧两种表头）
     _HEADER_MAP = {
@@ -792,7 +912,7 @@ class ElementLoader:
                 if best_key in blocks:
                     raw['locator'] = ["xpath", blocks[best_key]]
                     logger.debug(
-                        f"元素【{element_key}】locator 多设备匹配: {best_key}"
+                        f"元素【{element_key}】定位器多设备匹配: {best_key}"
                     )
 
         if 'locator' in raw:
