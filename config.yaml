@@ -76,7 +76,7 @@ excel:
   # - "设置"    ← 后续模块结构对齐后取消注释即可
 
   # 优先级筛选：P0=仅P0  P1=P1+P2  P2=仅P2  test=仅test  空=全部
-  priority_filter: "test"
+  priority_filter: "P0"
 
   # 模块筛选：逗号分隔，仅运行 C 列匹配的模块。空=全部
   # 环境变量 NOTE_TEST_MODULES 可覆盖（逗号分隔）

@@ -47,10 +47,8 @@ def _get_device_info_safe() -> dict:
 _element_matcher = ElementMatcher()
 
 
-def _parse_case_rows(rows: list[list[str]], priority_spec: str) -> list[ParsedCase]:
-    """从二维数组解析用例列表（Excel 和飞书共用）。rows[0] 为表头。"""
-    from boox_automation.engine.elements import get_element_loader
-    _loader = get_element_loader()
+def _parse_case_rows(rows: list[list[str]]) -> list[ParsedCase]:
+    """从二维数组解析用例文本（不含元素匹配，只做文本解析）。"""
     cases = []
 
     for row_idx_0, row in enumerate(rows):
@@ -58,21 +56,17 @@ def _parse_case_rows(rows: list[list[str]], priority_spec: str) -> list[ParsedCa
             continue  # 跳过表头行
         row1 = row_idx_0 + 1  # 1-based row number
 
-        # 安全取列值（补空字符串）
         def _col(c): return row[c] if c < len(row) else ""
 
-        title = _col(case_column("title"))             # E 列
-        steps_text = _col(case_column("steps"))       # H 列
-        priority = _col(case_column("priority"))      # F 列
-        module = _col(case_column("module"))          # C 列
-        precondition_text = _col(case_column("precondition"))  # G 列
-        expected_text = _col(case_column("expected")) # I 列
+        title = _col(case_column("title"))
+        steps_text = _col(case_column("steps"))
+        priority = _col(case_column("priority"))
+        module = _col(case_column("module"))
+        precondition_text = _col(case_column("precondition"))
+        expected_text = _col(case_column("expected"))
 
         if not title or not steps_text:
             continue
-
-        preconditions = parse_preconditions(precondition_text)
-        expected_results = parse_expected_results(expected_text)
 
         case = ParsedCase(
             title=str(title).strip(),
@@ -80,28 +74,38 @@ def _parse_case_rows(rows: list[list[str]], priority_spec: str) -> list[ParsedCa
             module=str(module).strip() if module else "",
             row_number=row1,
             steps=parse_steps(str(steps_text).strip()),
-            preconditions=preconditions,
-            expected_pages=expected_results,
+            preconditions=parse_preconditions(precondition_text),
+            expected_pages=parse_expected_results(expected_text),
         )
+        cases.append(case)
 
-        ctx = f"R{row1} [{priority}] {title}"
+    return cases
+
+
+def _resolve_case_elements(cases: list[ParsedCase]) -> list[ParsedCase]:
+    """为过滤后的用例匹配元素（仅对要执行的少量用例做匹配）。"""
+    from boox_automation.engine.elements import get_element_loader
+    _loader = get_element_loader()
+
+    for case in cases:
+        ctx = f"R{case.row_number} [{case.priority}] {case.title}"
         for step in case.steps:
             if step.tag:
-                step.element_key = _element_matcher.match(
-                    step.tag, page_context=case.module, case_context=ctx, warn=False)
-                if step.element_key:
+                ek = _element_matcher.match(
+                    step.tag, page_context=case.module, case_context=ctx, warn=None)
+                if ek:
+                    step.element_key = ek
                     if not step.action or step.action == "click":
-                        yaml_action = _element_matcher.suggest_action(step.element_key)
+                        yaml_action = _element_matcher.suggest_action(ek)
                         if yaml_action:
                             step.action = yaml_action
 
         for ep in case.expected_pages:
             if ep.tag:
                 raw_line = ep.raw
-                # toast 模式: 整行含 toast提示/toast不出现 后缀
                 if 'toast提示' in raw_line:
                     ep.check_mode = 'toast'
-                    ep.expected_text = ep.tag  # 【】内即期望 toast 文本
+                    ep.expected_text = ep.tag
                 elif 'toast不出现' in raw_line:
                     ep.check_mode = 'toast_not'
                     ep.expected_text = ep.tag
@@ -110,18 +114,16 @@ def _parse_case_rows(rows: list[list[str]], priority_spec: str) -> list[ParsedCa
                 else:
                     ep.check_mode = 'visible'
 
-                # visible/not_visible → 查预期结果 sheet
                 if ep.check_mode in ('visible', 'not_visible'):
                     ep.expected_key = _loader.match_expected_result(ep.tag)
-                    if not ep.expected_key:
-                        logger.debug(f"R{row1} 预期结果【{ep.tag}】未在预期结果 sheet 中匹配")
-                # toast: 直接使用 tag 作为预期文本，不查 sheet
                 else:
                     ep.expected_key = '__toast__'
 
-        cases.append(case)
+    return cases
 
-    # 优先级筛选
+
+def _apply_filters(cases: list[ParsedCase], priority_spec: str) -> list[ParsedCase]:
+    """优先级筛选 + 模块筛选。"""
     spec = priority_spec.upper().strip()
     if spec == "P0":
         cases = [c for c in cases if c.priority == "P0"]
@@ -132,7 +134,6 @@ def _parse_case_rows(rows: list[list[str]], priority_spec: str) -> list[ParsedCa
     elif spec == "TEST":
         cases = [c for c in cases if c.priority.upper() == "TEST"]
 
-    # 模块筛选
     modules_filter = cfg_test_modules()
     if modules_filter:
         cases = [c for c in cases if c.module in modules_filter]
@@ -188,7 +189,7 @@ def _read_local_sheets(excel_path: str, sheets: list[str]) -> dict[str, list[lis
     sheet_data = {}
     for sheet in sheets:
         if sheet not in wb.sheetnames:
-            logger.warning(f"本地 Sheet '{sheet}' 不存在，跳过")
+            logger.warning(f"本地工作表「{sheet}」不存在，跳过")
             continue
         ws = wb[sheet]
         rows = []
@@ -214,15 +215,22 @@ def _read_cloud_sheets(sheets: list[str]) -> dict[str, list[list[str]]]:
 
 def _parse_cases_from_sheets(sheet_data: dict, sheets: list[str],
                               priority_spec: str) -> list[ParsedCase]:
-    """从原始行数据解析用例列表。"""
+    """从原始行数据解析用例列表（解析→过滤→匹配元素）。"""
     all_cases = []
     for sheet in sheets:
         rows = sheet_data.get(sheet, [])
         if not rows:
-            logger.warning(f"sheet '{sheet}' 无数据")
+            logger.warning(f"工作表「{sheet}」无数据")
             continue
-        sheet_cases = _parse_case_rows(rows, priority_spec)
-        logger.info(f"sheet '{sheet}': {len(sheet_cases)} 条用例")
+        # 1. 文本解析（快速，无元素匹配）
+        sheet_cases = _parse_case_rows(rows)
+        logger.debug(f"工作表「{sheet}」: 解析 {len(sheet_cases)} 条用例")
+        # 2. 优先级 + 模块筛选
+        sheet_cases = _apply_filters(sheet_cases, priority_spec)
+        # 3. 只对筛选后的用例做元素匹配
+        sheet_cases = _resolve_case_elements(sheet_cases)
+        executable = sum(1 for c in sheet_cases if any(s.element_key for s in c.steps))
+        logger.info(f"工作表「{sheet}」: {len(sheet_cases)} 条用例（{executable} 条可执行）")
         all_cases.extend(sheet_cases)
     return all_cases
 
@@ -245,11 +253,17 @@ def _make_case_id(case: ParsedCase) -> str:
     return f"{prefix}R{case.row_number}-{case.title[:30]}"
 
 
-# 模块加载时解析 Excel，生成 parametrize 参数
+# ── 用例收集 ──
 from boox_automation.core.config import test_case_sheets
+logger.info("── 开始收集用例 ──")
 _all_cases = _load_cases(EXCEL_FILE, test_case_sheets(), PRIORITY_FILTER)
 _executable = [c for c in _all_cases if any(s.element_key for s in c.steps)]
 _executable.sort(key=lambda c: (_PRIORITY_ORDER.get(c.priority, 99), c.row_number))
+_skipped = len(_all_cases) - len(_executable)
+logger.info(
+    "── 收集完成: %d 条用例（%d 可执行, %d 跳过）──",
+    len(_all_cases), len(_executable), _skipped,
+)
 
 
 @allure.feature("Excel驱动测试")
@@ -308,7 +322,8 @@ class TestExcelRunner:
                     # 检查步骤 → 按 tag 关联到预期结果
                     if step.action == "skip" and step.tag:
                         _check_expected_by_tag(
-                            self.method, expected_by_tag, expected_consumed, step)
+                            self.method, expected_by_tag, expected_consumed, step,
+                            row=case.row_number, title=case.title)
 
                 # 最终检查：I 列未消费的预期结果（DEBUG，仅调试时可见）
                 unconsumed = []
@@ -321,11 +336,11 @@ class TestExcelRunner:
                         f"R{case.row_number} 预期结果中以下行未匹配到检查步骤:\n" +
                         "\n".join(f"  ↳ {u}" for u in unconsumed)
                     )
-        except Exception:
+        except Exception as e:
             for s in steps:
                 if not s.status:
                     s.status = "fail"
-            logger.error(f"⏐ FAILED  {case_id}")
+            logger.error(f"⏐ FAILED  {case_id} — {e}")
             raise
         finally:
             clear_step_context()
@@ -383,7 +398,8 @@ def _dispatch_step(method, public, step):
         logging.warning(f"步骤{step.seq}: 【{step.tag}】未知动作类型: {step.action}")
 
 
-def _check_expected_by_tag(method, expected_by_tag: dict, consumed: dict, step) -> None:
+def _check_expected_by_tag(method, expected_by_tag: dict, consumed: dict, step, *,
+                           row: int = 0, title: str = "") -> None:
     """按 tag 匹配预期结果并执行检查。
 
     检查步骤（action=skip）通过 tag 与 I 列预期结果关联，不再依赖步骤号。
@@ -393,15 +409,20 @@ def _check_expected_by_tag(method, expected_by_tag: dict, consumed: dict, step) 
     entries = expected_by_tag.get(tag, [])
 
     if not entries:
+        available_tags = sorted(expected_by_tag.keys())
+        available_hint = '、'.join(available_tags) if available_tags else '(I列无可解析的预期结果)'
+        case_info = f"R{row}「{title}」" if row else ""
         raise AssertionError(
-            f"步骤{step.seq}：检查【{tag}】未在预期结果列找到匹配【】"
+            f"{case_info} 步骤{step.seq}：检查【{tag}】未在用例表I列（预期结果列）中找到匹配\n"
+            f"  I列已有的【】标记: {available_hint}"
         )
 
     idx = consumed.get(tag, 0)
     if idx >= len(entries):
+        case_info = f"R{row}「{title}」" if row else ""
         raise AssertionError(
-            f"步骤{step.seq}：检查【{tag}】的预期结果已用完（I列仅{len(entries)}条同名匹配），"
-            f"请检查是否多写了检查步骤"
+            f"{case_info} 步骤{step.seq}：检查【{tag}】的预期结果已用完"
+            f"（用例表I列仅{len(entries)}条同名匹配），请检查是否多写了检查步骤"
         )
 
     ep = entries[idx]
@@ -409,8 +430,12 @@ def _check_expected_by_tag(method, expected_by_tag: dict, consumed: dict, step) 
     consumed[tag] = idx + 1
 
     if not ep.expected_key:
-        ep.status = "skip"
-        return
+        ep.status = "fail"
+        raise AssertionError(
+            f"步骤{step.seq}：检查【{tag}】在预期结果工作表中未找到匹配。"
+            f"请确认预期结果 sheet（如「预期结果【笔记】」）的 B 列（匹配文本）"
+            f"包含与 I 列【{tag}】完全一致的文字"
+        )
 
     try:
         _dispatch_expected_page(method, ep)
@@ -492,7 +517,7 @@ def _dispatch_expected_page(method, ep) -> None:
     loader = get_element_loader()
     page_info = loader.get_expected_page(ep.expected_key)
     if not page_info:
-        logger.warning(f"预期结果【{ep.tag}】（key={ep.expected_key}）在预期结果 sheet 中未找到")
+        logger.warning(f"步骤{ep.step_seq}：预期结果【{ep.tag}】（key={ep.expected_key}）在预期结果工作表中未找到")
         ep.status = "skip"
         return
 
@@ -512,7 +537,7 @@ def _dispatch_expected_page(method, ep) -> None:
                 ep.status = "fail"
                 raise
             except Exception as e:
-                logger.error(f"预期结果【{ep.tag}】（key={ep.expected_key}）元素检查失败: {e}")
+                logger.error(f"步骤{ep.step_seq}：预期结果【{ep.tag}】（key={ep.expected_key}）元素检查失败: {e}")
                 ep.status = "fail"
                 raise
 
@@ -527,7 +552,7 @@ def _dispatch_expected_page(method, ep) -> None:
             content = _resolve_device_content(file_content, device_info, key=ep.expected_key)
 
     if not content:
-        logger.warning(f"预期结果【{ep.tag}】（key={ep.expected_key}）无匹配的设备内容，跳过")
+        logger.warning(f"步骤{ep.step_seq}：预期结果【{ep.tag}】（key={ep.expected_key}）无匹配的设备内容，跳过")
         ep.status = "skip"
         return
 
@@ -538,7 +563,7 @@ def _dispatch_expected_page(method, ep) -> None:
     try:
         actual_xml = driver.page_source
     except Exception as e:
-        logger.error(f"预期结果【{ep.tag}】（key={ep.expected_key}）获取 page_source 失败: {e}")
+        logger.error(f"步骤{ep.step_seq}：预期结果【{ep.tag}】（key={ep.expected_key}）获取 page_source 失败: {e}")
         ep.status = "skip"
         return
 
@@ -546,7 +571,7 @@ def _dispatch_expected_page(method, ep) -> None:
         result = XmlChecker.check(content, actual_xml, mode=ep.check_mode)
     except Exception as e:
         logger.error(
-            f"预期结果【{ep.tag}】（key={ep.expected_key}）XML 解析失败: {e}\n"
+            f"步骤{ep.step_seq}：预期结果【{ep.tag}】（key={ep.expected_key}）XML 解析失败: {e}\n"
             f"XML 前200字符: {content[:200]}"
         )
         ep.status = "skip"

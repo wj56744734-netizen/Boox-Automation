@@ -630,8 +630,8 @@ class Base_note_class:
             element = WebDriverWait(self.driver, max(timeout // 2, 2)).until(
                 EC.element_to_be_clickable((By.XPATH, fallback))
             )
-            logging.debug(f"[DEBUG] 文本定位用 contains 兜底命中：{name}")
-        logging.debug(f"[DEBUG] 成功获取可点击元素（文本定位）：{name}")
+            logging.debug(f"文本定位用 contains 兜底命中：{name}")
+        logging.debug(f"成功获取可点击元素（文本定位）：{name}")
         return element
 
     @retry_and_handle_exceptions()
@@ -649,8 +649,8 @@ class Base_note_class:
             element = WebDriverWait(self.driver, max(timeout // 2, 2)).until(
                 EC.visibility_of_element_located((By.XPATH, fallback))
             )
-            logging.debug(f"[DEBUG] 文本定位用 contains 兜底命中：{name}")
-        logging.debug(f"[DEBUG] 成功获取可见元素（文本定位）：{name}")
+            logging.debug(f"文本定位用 contains 兜底命中：{name}")
+        logging.debug(f"成功获取可见元素（文本定位）：{name}")
         return element
 
     @retry_and_handle_exceptions()
@@ -673,7 +673,7 @@ class Base_note_class:
         elements = WebDriverWait(self.driver, timeout).until(
             EC.visibility_of_all_elements_located((by_method, locator))
         )
-        logging.debug(f"[DEBUG] 成功获取元素列表（{by_method}：{locator}），共 {len(elements)} 个元素")
+        logging.debug(f"成功获取元素列表（{by_method}：{locator}），共 {len(elements)} 个元素")
         return elements
 
     @retry_and_handle_exceptions()
@@ -696,7 +696,7 @@ class Base_note_class:
         element = WebDriverWait(self.driver, timeout).until(
             EC.element_to_be_clickable((by_method, locator))
         )
-        logging.debug(f"[DEBUG] 成功获取可点击元素（{by_method}：{locator}）")
+        logging.debug(f"成功获取可点击元素（{by_method}：{locator}）")
         return element
 
     @retry_and_handle_exceptions()
@@ -719,7 +719,7 @@ class Base_note_class:
         element = WebDriverWait(self.driver, timeout).until(
             EC.visibility_of_element_located((by_method, locator))
         )
-        logging.debug(f"[DEBUG] 成功获取可见元素（{by_method}：{locator}）")
+        logging.debug(f"成功获取可见元素（{by_method}：{locator}）")
         return element
 
 
@@ -1096,7 +1096,7 @@ class Operation_method(Base_note_class):
                 except StaleElementReferenceException:
                     continue
                 if actual == target:
-                    logging.debug(f"[DEBUG] 匹配到文本 '{target}' 的元素")
+                    logging.debug(f"匹配到文本 '{target}' 的元素")
                     if should_click:
                         element.click()
                     return element
@@ -1138,7 +1138,7 @@ class Operation_method(Base_note_class):
                 if should_click:
                     element.click()
                 if element.text != target_name:
-                    logging.debug(f"[DEBUG] 校验元素文本：预期 {target_name}，实际 {element.text}")
+                    logging.debug(f"校验元素文本：预期 {target_name}，实际 {element.text}")
                     logging.error(f"未找到 '{target_name}' 元素")
                     return False
                 return True
@@ -1334,7 +1334,7 @@ class Operation_method(Base_note_class):
                 except StaleElementReferenceException:
                     continue
                 if actual == target:
-                    logging.debug(f"[DEBUG] 匹配到文本 '{target}' 的元素，执行长按")
+                    logging.debug(f"匹配到文本 '{target}' 的元素，执行长按")
                     self._safe_long_press_by_element(element, duration=2)
                     return True
             logging.error(f"未找到指定 '{target_name}' 元素")
@@ -1362,7 +1362,7 @@ class Operation_method(Base_note_class):
         with allure.step(step_msg):
             elements = self.check_display_timeout(locator_type, locator_value)
             if elements:
-                logging.debug(f"[DEBUG] 获取元素文本（{locator_type}：{locator_value}），文本为 {elements.text}")
+                logging.debug(f"获取元素文本（{locator_type}：{locator_value}），文本为 {elements.text}")
             return elements.text if elements else None
 
     def obtain_element_list_text(self, by_method=None, locator=None, *, element_key=None):
@@ -1390,7 +1390,7 @@ class Operation_method(Base_note_class):
                     text = element.text
                     if text:
                         element_list.append(text)
-                logging.debug(f"[DEBUG] 提取非空文本，共 {len(element_list)} 个")
+                logging.debug(f"提取非空文本，共 {len(element_list)} 个")
             return element_list
 
     # ---- 弹窗处理 ----
@@ -1422,7 +1422,7 @@ class Operation_method(Base_note_class):
                     elements = self.check_list_timeout(locator_type, locator_value)
                     for element in elements:
                         if element.text == target_name:
-                            logging.debug(f"[DEBUG] 匹配到弹窗内文本 '{target_name}' 的元素，执行点击")
+                            logging.debug(f"匹配到弹窗内文本 '{target_name}' 的元素，执行点击")
                             self.xpath_check_timeout(target_name)
                             element.click()
                             return True
@@ -1447,7 +1447,7 @@ class Operation_method(Base_note_class):
             end_x = int(screen_size['width'] * end_screen_width)
             end_y = int(screen_size['height'] * end_screen_height)
             self.driver.swipe(start_x, start_y, end_x, end_y, duration=100)
-            logging.debug(f"[DEBUG] 执行屏幕滑动：起点({start_x},{start_y}) → 终点({end_x},{end_y})")
+            logging.debug(f"执行屏幕滑动：起点({start_x},{start_y}) → 终点({end_x},{end_y})")
             return True
 
     # ---- 方向滑动 ----
@@ -1559,7 +1559,7 @@ class Operation_method(Base_note_class):
                 WebDriverWait(self.driver, timeout).until_not(
                     EC.presence_of_element_located((by_method, locator))
                 )
-                logging.debug(f"[DEBUG] 弹窗（{by_method}：{locator}）已消失")
+                logging.debug(f"弹窗（{by_method}：{locator}）已消失")
                 return True
             except TimeoutException:
                 logging.error(f" {prompt} , {timeout} 秒后超时")

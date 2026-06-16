@@ -441,20 +441,14 @@ class ElementLoader:
         all_sheets = list_sheet_names(token)
 
         def _sheet_matches_module(sheet_name: str) -> bool:
-            """sheet 名匹配任一配置模块（含【】格式、遗留无【】格式）。"""
+            """sheet 名匹配任一配置模块（精确匹配或「通用」）。"""
             if sheet_name == "使用说明":
                 return False
             if _EXPECTED_SHEET_MODULE_RE.match(sheet_name):
                 return False
-            # 「通用」sheet 名精确匹配
-            if sheet_name == "通用":
-                return True
-            # 【模块名】格式
-            for mod in modules:
-                if f"【{mod}】" in sheet_name:
-                    return True
-            # 遗留格式：不含【】的 sheet 无条件加载（向后兼容）
-            if "【" not in sheet_name:
+            if sheet_name.startswith("预期结果"):
+                return False  # 含半角括号的预期结果格式（如 预期结果（Reader））
+            if sheet_name == "通用" or sheet_name in modules:
                 return True
             return False
 
@@ -485,7 +479,7 @@ class ElementLoader:
                 self._key_source[key] = f"feishu::{sheet_name}"
                 total += 1
 
-        logger.debug(f"已从飞书加载 {total} 个元素定义 ({len(element_sheets)} 个 Sheet)")
+        logger.debug(f"已从飞书加载 {total} 个元素定义 ({len(element_sheets)} 个工作表)")
 
     # ---- 预期结果 sheet 加载 ----
 
@@ -545,7 +539,7 @@ class ElementLoader:
                 f"（模块: {', '.join(modules)}）"
             )
         else:
-            logger.debug("飞书中无模块化预期结果 sheet，跳过")
+            logger.debug("飞书中无模块化预期结果工作表，跳过")
 
     def _save_expected_to_cache(self):
         """将预期结果数据保存到本地缓存。"""
@@ -769,7 +763,7 @@ class ElementLoader:
                 self._key_source[key] = f"{xlsx_path}::{sheet_name}"
                 count += 1
 
-        logger.info(f"已从 {xlsx_path} 加载 {count} 个元素定义 ({len(wb.sheetnames)} 个 Sheet)")
+        logger.info(f"已从 {xlsx_path} 加载 {count} 个元素定义 ({len(wb.sheetnames)} 个工作表)")
 
     def get_element_info(self, element_key: str) -> dict:
         """
@@ -902,12 +896,16 @@ class ElementMatcher:
              warn: bool = True) -> str:
         """根据【】标记文本查找 element_key。
 
+        warn=True:  未匹配时 WARNING（运行时用）
+        warn=False: 未匹配时 DEBUG（收集阶段用，不显示在 INFO 级别）
+        warn=None:  未匹配时静默（批量收集用）
+
         匹配优先级（方案 B）：
         1. page_context.tag 精确查找（模块.匹配文本）
         2. 通用.tag 回退查找
         3. 反向索引精确匹配
         4. 多候选时按页面上下文评分
-        5. 部分匹配
+        5. locator 纯文本精确匹配（兜底）
         6. 都无则返回空
         """
         if not tag:
@@ -939,9 +937,9 @@ class ElementMatcher:
             if best:
                 return best
 
-        # 5. 部分匹配
+        # 5. locator 纯文本精确匹配（仅当 locator 非 XPath 时生效）
         partial = [k for k, v in elements.items()
-                   if tag in str(v.get("locator", ["", ""])[1])]
+                   if tag == str(v.get("locator", ["", ""])[1])]
         if len(partial) == 1:
             return partial[0]
         if len(partial) > 1:
@@ -949,16 +947,18 @@ class ElementMatcher:
             if best:
                 return best
 
-        if warn:
+        if warn is True:
             logger.warning(f"【{tag}】{ctx} 未匹配到任何元素")
-        else:
+        elif warn is False:
             logger.debug(f"【{tag}】{ctx} 未匹配到任何元素")
+        # warn is None: 静默
         return ""
 
     def _pick_best(self, tag: str, candidates: list[str],
                    page_context: str, ctx: str, warn: bool = True) -> str:
+        silent = warn is None
         if not page_context:
-            if warn:
+            if warn is True:
                 logger.warning(
                     f"【{tag}】{ctx} 匹配到 {len(candidates)} 个，无页面上下文，使用: {candidates[0]}"
                 )
@@ -979,13 +979,13 @@ class ElementMatcher:
         scored.sort(key=lambda x: -x[0])
         best_score, best_key = scored[0]
 
-        if best_score > 0 and len(candidates) > 1:
+        if best_score > 0 and len(candidates) > 1 and not silent:
             alt = ", ".join(k for _, k in scored[1:3])
             logger.debug(
                 f"【{tag}】{ctx} {len(candidates)}个候选, "
                 f"页面'{page_context}' → 选 {best_key} (alt: {alt})"
             )
-        elif len(candidates) > 1 and warn:
+        elif len(candidates) > 1 and warn is True:
             logger.warning(
                 f"【{tag}】{ctx} 匹配到 {len(candidates)} 个，"
                 f"页面'{page_context}'无匹配，使用: {best_key}"

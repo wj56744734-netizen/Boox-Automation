@@ -267,7 +267,6 @@ def _send_feishu_report(session) -> None:
 
     allure_dir = getattr(session.config.option, "allure_report_dir", None)
     push_report(card, allure_dir)
-    logging.info("飞书测试报告已推送")
 
 
 def _extract_case_titles(reports, max_items: int = 10) -> list[str]:

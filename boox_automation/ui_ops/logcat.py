@@ -5,6 +5,7 @@ from threading import Thread, Event, Condition, Lock
 from queue import Queue
 from boox_automation.devices.info import Device_basic_information
 
+_LOGCAT_INIT_LOGGED = [False]  # 只输出一次初始化日志
 
 class Logcat:
 
@@ -27,7 +28,9 @@ class Logcat:
             'detailed_matches': {}
         }
         self._device_id = Device_basic_information().get_connected_device_ids()
-        logging.debug("Logcat 实例已初始化")
+        if not _LOGCAT_INIT_LOGGED[0]:
+            logging.debug("Logcat 实例已初始化")
+            _LOGCAT_INIT_LOGGED[0] = True
 
     # ========== 释放锁（仅在工作线程 finally 中使用） ==========
 

@@ -141,7 +141,7 @@ def read_sheet_by_name(
                         for seg in cell
                     )
 
-    logger.debug(f"已从飞书读取 sheet '{sheet_name}': {len(rows)} 行")
+    logger.debug(f"已从飞书读取工作表「{sheet_name}」: {len(rows)} 行")
     return rows
 
 
