@@ -141,10 +141,8 @@ class Device_basic_information:
                 re.DOTALL
             )
             if not wifi_info:
-                logging.info("Wi-Fi状态: 未连接 ")
-                # ========== 原逻辑完全保留 ==========
-                logging.error("请连接Wi-Fi后再开始测试！！！")
-                raise RuntimeError("Wi-Fi未连接，无法继续测试")
+                logging.warning("Wi-Fi状态: 未连接，部分需要网络的功能可能不可用")
+                return {"connected": False}
 
             # 保留原变量名transport_info，原逻辑完全不变
             transport_info = wifi_info.group(1)
@@ -367,7 +365,6 @@ class Device_basic_information:
             )
             logging.info(f"      系统: {device_info.get('build_date_time')}")
 
-            time.sleep(3)
             self.get_device_memory_info(device_id)
             self.get_device_storage_info(device_id)
             logging.info("-" * 40)

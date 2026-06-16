@@ -428,32 +428,25 @@ def note_test_initial(request):
     home_error = press_home_with_recovery("测试前")
     if home_error:
         pytest.fail(home_error, pytrace=False)
-    from boox_automation.core.config import timeout_app_launch
-    start_time = time.time()
-    timeout = timeout_app_launch()
-    while time.time() - start_time < timeout:
 
-        if version_info is None:
-            logging.warning("无法获取版本信息，跳过版本检查")
-            version_str = None
-        else:
-            version_str = public.get_version(short=True)
+    # UI 沉降等待（HOME 键后给桌面/应用切换留出渲染时间）
+    time.sleep(2)
 
-
-        if device_region == "国内" and version_str == "4.2":
+    # 4.2 国内设备：首次启动可能有"开始使用"引导按钮，尝试点击跳过
+    if device_region == "国内" and version_info and public.get_version(short=True) == "4.2":
+        try:
+            ensure_driver_alive(reason="启动引导检查")
+            from selenium.webdriver.support import expected_conditions as EC
+            from selenium.webdriver.support.wait import WebDriverWait
             try:
-                ensure_driver_alive(reason="启动引导检查")
-                from selenium.webdriver.support import expected_conditions as EC
-                from selenium.webdriver.support.wait import WebDriverWait
-                try:
-                    btn = WebDriverWait(driver, 5).until(
-                        EC.presence_of_element_located((By.XPATH, '//*[@text="开始使用"]'))
-                    )
-                    btn.click()
-                except Exception:
-                    pass  # 无启动引导按钮则跳过
-            except Exception as e:
-                logging.warning(f"启动引导检查失败，跳过开始使用点击：{e}")
+                btn = WebDriverWait(driver, 5).until(
+                    EC.presence_of_element_located((By.XPATH, '//*[@text="开始使用"]'))
+                )
+                btn.click()
+            except Exception:
+                pass  # 无启动引导按钮则跳过
+        except Exception as e:
+            logging.warning(f"启动引导检查失败，跳过开始使用点击：{e}")
 
     yield  # 测试执行点
 

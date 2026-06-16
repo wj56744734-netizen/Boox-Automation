@@ -76,8 +76,17 @@ def _get_tenant_token() -> str:
     return token
 
 
-def list_sheet_names(spreadsheet_token: str) -> list[str]:
-    """列出电子表格中所有 sheet 名称。"""
+_SHEET_META_CACHE: dict[str, list[dict]] = {}
+
+
+def _get_sheet_meta(spreadsheet_token: str) -> list[dict]:
+    """获取表格的 sheet 元数据列表（同 token 首次查询后缓存）。
+
+    Returns: [{"title": str, "sheet_id": str}, ...]
+    """
+    if spreadsheet_token in _SHEET_META_CACHE:
+        return _SHEET_META_CACHE[spreadsheet_token]
+
     if not spreadsheet_token:
         raise RuntimeError("飞书 spreadsheet_token 未配置")
 
@@ -87,7 +96,15 @@ def list_sheet_names(spreadsheet_token: str) -> list[str]:
         f"{spreadsheet_token}/sheets/query"
     )
     body = _feishu_request("GET", url, bearer_token=app_token)
-    return [s["title"] for s in body.get("data", {}).get("sheets", [])]
+    sheets = body.get("data", {}).get("sheets", [])
+    meta = [{"title": s["title"], "sheet_id": s["sheet_id"]} for s in sheets]
+    _SHEET_META_CACHE[spreadsheet_token] = meta
+    return meta
+
+
+def list_sheet_names(spreadsheet_token: str) -> list[str]:
+    """列出电子表格中所有 sheet 名称。"""
+    return [s["title"] for s in _get_sheet_meta(spreadsheet_token)]
 
 
 def read_sheet_by_name(
@@ -100,18 +117,11 @@ def read_sheet_by_name(
     if not spreadsheet_token:
         raise RuntimeError("飞书 spreadsheet_token 未配置")
 
-    app_token = _get_tenant_token()
-
-    # 1. 获取 sheet_id
-    list_url = (
-        f"https://open.feishu.cn/open-apis/sheets/v3/spreadsheets/"
-        f"{spreadsheet_token}/sheets/query"
-    )
-    list_body = _feishu_request("GET", list_url, bearer_token=app_token)
-    sheets = list_body.get("data", {}).get("sheets", [])
+    # 1. 从缓存获取 sheet_id
+    sheets = _get_sheet_meta(spreadsheet_token)
     sheet_id = None
     for s in sheets:
-        if s.get("title") == sheet_name:
+        if s["title"] == sheet_name:
             sheet_id = s["sheet_id"]
             break
     if not sheet_id:
@@ -119,6 +129,8 @@ def read_sheet_by_name(
             f"Sheet '{sheet_name}' 不存在，可选: "
             f"{[s['title'] for s in sheets]}"
         )
+
+    app_token = _get_tenant_token()
 
     # 2. 读取全部值（ToString 确保富文本单元格返回纯文本）
     read_url = (
@@ -198,15 +210,9 @@ def _col_to_letter(n: int) -> str:
 
 def get_sheet_id(spreadsheet_token: str, sheet_name: str) -> str:
     """按名称获取 sheet_id。"""
-    list_url = (
-        f"https://open.feishu.cn/open-apis/sheets/v3/spreadsheets/"
-        f"{spreadsheet_token}/sheets/query"
-    )
-    app_token = _get_tenant_token()
-    body = _feishu_request("GET", list_url, bearer_token=app_token)
-    sheets = body.get("data", {}).get("sheets", [])
+    sheets = _get_sheet_meta(spreadsheet_token)
     for s in sheets:
-        if s.get("title") == sheet_name:
+        if s["title"] == sheet_name:
             return s["sheet_id"]
     raise RuntimeError(
         f"Sheet '{sheet_name}' 不存在，可选: "
@@ -221,13 +227,20 @@ def use_local_excel() -> bool:
 
 # ---- 连通性检查 ----
 
+_FEISHU_REACHABLE_CACHE: bool | None = None
+
+
 def check_feishu_reachable(timeout: int = 3) -> bool:
-    """快速检查飞书 API 是否可达。"""
+    """快速检查飞书 API 是否可达（同进程内首次探测后缓存结果）。"""
+    global _FEISHU_REACHABLE_CACHE
+    if _FEISHU_REACHABLE_CACHE is not None:
+        return _FEISHU_REACHABLE_CACHE
     try:
         requests.head("https://open.feishu.cn", timeout=timeout)
-        return True
+        _FEISHU_REACHABLE_CACHE = True
     except Exception:
-        return False
+        _FEISHU_REACHABLE_CACHE = False
+    return _FEISHU_REACHABLE_CACHE
 
 
 # ---- 本地缓存 ----

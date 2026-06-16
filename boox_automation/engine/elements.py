@@ -356,50 +356,49 @@ class ElementLoader:
         self._auto_discover()
 
     def _auto_discover(self):
-        """自动加载元素定义（云端优先 → 缓存兜底 → 本地 Excel）。"""
+        """自动加载元素定义（云端优先 → 缓存兜底 → 本地 Excel）。
+
+        元素和预期结果各自独立回退，预期结果加载不受元素加载异常影响。
+        """
         from boox_automation.core.feishu import (
             use_local_excel, check_feishu_reachable,
             load_cache, save_cache, get_cache_age,
         )
 
+        # ── 阶段1：加载元素 ──
         if use_local_excel():
             logger.debug("元素加载路径: 本地 Excel（USE_LOCAL_EXCEL=1）")
             self._load_from_local_xlsx()
-            self._load_expected_results()
-            return
-
-        # 1. 尝试云端
-        if check_feishu_reachable():
+        elif check_feishu_reachable():
             logger.debug("元素加载路径: 飞书云端")
             try:
                 self._load_from_cloud()
                 self._save_to_cache()
                 logger.info(f"元素来源: 飞书云端（已更新本地缓存）")
-                self._load_expected_results()
-                return
             except Exception:
                 logger.warning(
-                    "飞书云端加载失败，回退缓存。如已修改飞书在线文档但未生效，"
+                    "飞书云端加载元素失败，回退缓存。如已修改飞书在线文档但未生效，"
                     "请删缓存后重试: rm boox_automation/data/.cache/elements.json",
                     exc_info=True,
                 )
+                if not self._load_from_cache():
+                    logger.warning("无可用缓存，回退本地 Excel")
+                    self._load_from_local_xlsx()
+        else:
+            logger.debug("元素加载路径: 本地缓存")
+            if self._load_from_cache():
+                age = get_cache_age("elements")
+                logger.warning(
+                    f"元素来源: 本地缓存（{age}）。"
+                    f"如飞书在线文档已有更新，请删缓存后重试: "
+                    f"rm boox_automation/data/.cache/elements.json"
+                )
+            else:
+                logger.debug("元素加载路径: 本地 Excel（兜底）")
+                logger.warning("无可用缓存，回退本地 Excel")
+                self._load_from_local_xlsx()
 
-        # 2. 云端不可用 → 缓存兜底
-        logger.debug("元素加载路径: 本地缓存")
-        if self._load_from_cache():
-            age = get_cache_age("elements")
-            logger.warning(
-                f"元素来源: 本地缓存（{age}）。"
-                f"如飞书在线文档已有更新，请删缓存后重试: "
-                f"rm boox_automation/data/.cache/elements.json"
-            )
-            self._load_expected_results()
-            return
-
-        # 3. 兜底本地 Excel
-        logger.debug("元素加载路径: 本地 Excel（兜底）")
-        logger.warning("无可用缓存，回退本地 Excel")
-        self._load_from_local_xlsx()
+        # ── 阶段2：加载预期结果（独立回退，失败直接中断测试）──
         self._load_expected_results()
 
     def _save_to_cache(self):
@@ -492,24 +491,29 @@ class ElementLoader:
     # ---- 预期结果 sheet 加载 ----
 
     def _load_expected_results(self):
-        """加载「预期结果」sheet（三级回退：云端 → 缓存 → 本地）。"""
+        """加载「预期结果」sheet（三级回退：云端 → 缓存 → 本地）。
+
+        云端为权威数据源：云端可达且查询成功但无预期结果时，不回退缓存，
+        直接中断测试（因为云端明确表示表不存在，缓存数据已过期）。
+        """
         from boox_automation.core.feishu import use_local_excel
 
         if use_local_excel():
             logger.debug("预期结果加载路径: 本地 Excel（USE_LOCAL_EXCEL=1）")
             self._load_expected_from_local()
         else:
-            loaded = False
+            cloud_checked = False  # 云端是否成功查询（无论有无数据）
             try:
                 from boox_automation.core.feishu import check_feishu_reachable
                 if check_feishu_reachable():
                     logger.debug("预期结果加载路径: 飞书云端")
                     try:
                         self._load_expected_from_cloud()
+                        cloud_checked = True  # 云端查询成功
                         if self._expected_results:
                             self._save_expected_to_cache()
                             logger.info("预期结果来源: 飞书云端（已更新本地缓存）")
-                            loaded = True
+                            return
                     except Exception:
                         logger.warning(
                             "飞书云端加载预期结果失败，回退缓存",
@@ -518,15 +522,19 @@ class ElementLoader:
             except Exception:
                 pass
 
-            if not loaded:
-                logger.debug("预期结果加载路径: 本地缓存")
-                if self._load_expected_from_cache():
-                    logger.warning("预期结果来源: 本地缓存")
-                    loaded = True
+            # 云端明确表示无预期结果 → 不回退缓存，直接中断
+            if cloud_checked:
+                self._ensure_expected_loaded()
 
-            if not loaded:
-                logger.debug("预期结果加载路径: 本地 Excel（兜底）")
-                self._load_expected_from_local()
+            # 云端不可达 → 缓存兜底
+            logger.debug("预期结果加载路径: 本地缓存")
+            if self._load_expected_from_cache():
+                logger.warning("预期结果来源: 本地缓存")
+                return
+
+            # 缓存也无 → 本地兜底
+            logger.debug("预期结果加载路径: 本地 Excel（兜底）")
+            self._load_expected_from_local()
 
         self._ensure_expected_loaded()
 

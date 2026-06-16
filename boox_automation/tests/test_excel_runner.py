@@ -119,6 +119,29 @@ def _resolve_case_elements(cases: list[ParsedCase]) -> list[ParsedCase]:
                 else:
                     ep.expected_key = '__toast__'
 
+        # 收集阶段诊断：预期结果匹配失败的 tag 提前暴露
+        unresolved = [
+            ep for ep in case.expected_pages
+            if ep.check_mode in ('visible', 'not_visible') and not ep.expected_key
+        ]
+        if unresolved:
+            diag = _loader.get_expected_diagnostics()
+            total = diag.get("total_results", 0)
+            if total == 0:
+                logger.warning(
+                    f"R{case.row_number}「{case.title}」"
+                    f"I列预期结果 {', '.join(f'【{ep.tag}】' for ep in unresolved)} "
+                    f"未匹配：预期结果工作表不存在，用例执行时将报错"
+                )
+            else:
+                index_keys = sorted(diag.get("match_index", {}).keys())
+                logger.warning(
+                    f"R{case.row_number}「{case.title}」"
+                    f"I列预期结果 {', '.join(f'【{ep.tag}】' for ep in unresolved)} "
+                    f"在预期结果工作表 B 列中未匹配。"
+                    f"当前 B 列已有: {', '.join(index_keys) if index_keys else '(空)'}"
+                )
+
     return cases
 
 
