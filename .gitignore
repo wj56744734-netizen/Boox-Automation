@@ -26,6 +26,9 @@ boox_automation/scripts/Note_page_contrast/exception_page/
 # Excel data files（云端优先，本地仅离线开发用）
 *.xlsx
 
+# Project instructions (local only)
+CLAUDE.md
+
 # Runtime logs
 *.log
 TEXT.txt
