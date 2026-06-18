@@ -1185,12 +1185,29 @@ class Operation_method(Base_note_class):
 
     # ---- Toast 检测 ----
 
+    @staticmethod
+    def _xpath_literal(text: str) -> str:
+        """构造 XPath 字符串字面量，正确处理 ' 和 \" 转义。"""
+        if '"' not in text:
+            return f'"{text}"'
+        if "'" not in text:
+            return f"'{text}'"
+        # 同时含单双引号，用 concat() 拼接
+        parts = text.split('"')
+        result = 'concat('
+        for i, part in enumerate(parts):
+            if i > 0:
+                result += ", '\"', "
+            result += f'"{part}"'
+        result += ')'
+        return result
+
     def wait_check_toast(self, toast_true=None, toast_false=None, toast_timeout=None,
                          *, toast_true_key=None, toast_false_key=None):
-        """
-        检查Toast弹窗：支持校验"预期Toast"和"异常Toast"。
-        - 旧用法: wait_check_toast("保存成功", "保存失败", 5)
-        - 新用法: wait_check_toast(toast_true_key="toast_save_success")
+        """检查Toast弹窗：XPath 定位 android.widget.Toast，文本匹配在 XPath 层完成。
+
+        Python 客户端 el.text / get_attribute('text') 对 Toast 返回空，
+        但 Appium 服务端 XPath 引擎能正确读取 @text 属性。
         """
         from boox_automation.core.config import get_int
         if toast_timeout is None:
@@ -1205,25 +1222,40 @@ class Operation_method(Base_note_class):
         else:
             raise AssertionError("必须提供 toast_true 或 toast_true_key")
 
+        abnormal_toast_message = None
         if toast_false_key is not None:
             info = self._resolve_locator(toast_false_key)
             abnormal_toast_message = info.get('name') or info.get('value')
-        else:
+        elif toast_false is not None:
             abnormal_toast_message = toast_false
 
+        # 用 WebDriverWait.until() 直接拿元素，立即读属性，避免 Toast 闪现后消失
+        # （分两次请求 page_source 时 Toast 可能已消失）
+        toast_class_xpath = '//android.widget.Toast'
         with allure.step(step_msg):
-            start_time = time.time()
-            while time.time() - start_time < toast_timeout:
-                page_source = self.driver.page_source
-                if expected_toast_message in page_source:
-                    logging.debug(f"[wait_check_toast] 检测到预期Toast: '{expected_toast_message}'")
-                    return True
-                elif abnormal_toast_message is not None:
-                    if abnormal_toast_message in page_source:
-                        logging.debug(f"[wait_check_toast] 检测到异常Toast: '{abnormal_toast_message}'")
-                        return False
-                time.sleep(1)
-            logging.debug(f"[wait_check_toast] 超时({toast_timeout}s)未检测到Toast: '{expected_toast_message}'")
+            try:
+                el = WebDriverWait(self.driver, toast_timeout, poll_frequency=0.3).until(
+                    EC.presence_of_element_located((By.XPATH, toast_class_xpath))
+                )
+            except TimeoutException:
+                logging.info(f"[Toast] 未弹出({toast_timeout}s)，期望: '{expected_toast_message}'")
+                return False
+
+            # Toast 还在，立即读属性
+            actual_text = (el.text or el.get_attribute('text') or '').strip()
+            logging.debug(f"[Toast] 元素text='{actual_text}'")
+
+            if expected_toast_message in actual_text:
+                logging.info(f"[Toast] 检测到预期Toast: '{expected_toast_message}'")
+                return True
+
+            if abnormal_toast_message and abnormal_toast_message in actual_text:
+                logging.info(f"[Toast] 检测到异常Toast: '{abnormal_toast_message}'")
+                return False
+
+            logging.info(
+                f"[Toast] 文本不匹配: 期望='{expected_toast_message}'，"
+                f"实际='{actual_text}'")
             return False
 
     # ---- 输入框 ----

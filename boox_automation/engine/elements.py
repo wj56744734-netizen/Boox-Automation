@@ -1108,6 +1108,7 @@ class ElementMatcher:
         if not tag:
             return ""
 
+        tag = tag.strip()
         ctx = f" [{case_context}]" if case_context else ""
         elements = self._get_elements()
 

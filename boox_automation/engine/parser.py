@@ -88,7 +88,7 @@ def parse_steps(raw_text: str) -> list[ParsedStep]:
         content = (seq_match.group(2) if seq_match else line).strip()
 
         tags = _TAG_RE.findall(content)
-        tag = tags[0] if tags else ""
+        tag = tags[0].strip() if tags else ""
 
         action = _detect_action(content, tag)
 

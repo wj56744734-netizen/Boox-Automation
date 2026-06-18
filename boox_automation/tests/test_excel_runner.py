@@ -594,20 +594,16 @@ def _dispatch_expected_page(method, ep) -> None:
     # toast 模式: 不走 XML 对比，直接轮询 page_source。toast 文本来自 B 列（匹配文本）
     if check_mode == 'toast':
         toast_text = page_info.get("match", ep.tag)
-        method.wait_check_toast(toast_true=toast_text, toast_timeout=5)
+        if not method.wait_check_toast(toast_true=toast_text, toast_timeout=5):
+            raise AssertionError(
+                f"步骤{ep.step_seq}：预期结果【{ep.tag}】Toast'{toast_text}'未在{5}秒内出现")
         ep.status = 'pass'
         return
     elif check_mode == 'toast_not':
         toast_text = page_info.get("match", ep.tag)
-        import time
-        from boox_automation.core.config import get_int
-        timeout = get_int("toast.timeout", 5)
-        start = time.time()
-        while time.time() - start < timeout:
-            if toast_text in method.driver.page_source:
-                raise AssertionError(
-                    f"步骤{ep.step_seq}：预期结果【{ep.tag}】Toast不应出现'{toast_text}'但已检测到")
-            time.sleep(1)
+        if method.wait_check_toast(toast_true=toast_text, toast_timeout=5):
+            raise AssertionError(
+                f"步骤{ep.step_seq}：预期结果【{ep.tag}】Toast不应出现'{toast_text}'但已检测到")
         ep.status = 'pass'
         return
 

@@ -341,6 +341,12 @@ def adb_clean_storage_files(device_id):
     commands = [f'adb -s {device_id} shell rm -rf {path}' for path in paths]
     _run_adb_cleanup_commands(device_id, commands, "清理存储文件")
 
+def _extract_major_minor(version: str) -> str:
+    """从版本字符串提取主版本号，如 '4.2.1-rel' → '4.2'。"""
+    import re
+    m = re.match(r'\d+\.\d+', version)
+    return m.group(0) if m else ""
+
 # --------------------- 测试初始化fixture ---------------------
 DEVICE_INFO_PRINTED = False
 _DRIVER_FAILURE_COUNT = 0
@@ -430,7 +436,8 @@ def note_test_initial(request):
     time.sleep(2)
 
     # 4.2 国内设备：首次启动可能有"开始使用"引导按钮，尝试点击跳过
-    if device_region == "国内" and version_info and public.get_version(short=True) == "4.2":
+    _ver_short = _extract_major_minor(version_info) if version_info else ""
+    if device_region == "国内" and _ver_short == "4.2":
         try:
             ensure_driver_alive(reason="启动引导检查")
             from selenium.webdriver.support import expected_conditions as EC
