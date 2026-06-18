@@ -9,9 +9,6 @@ from boox_automation.core.config import feishu_elements_token, test_case_sheets
 
 logger = logging.getLogger(__name__)
 
-token = feishu_elements_token()
-modules = ["通用"] + test_case_sheets()
-
 # ---- 元素表 6 列注释 ----
 
 element_comments = [
@@ -89,20 +86,6 @@ element_comments = [
     ]),
 ]
 
-all_sheets = list_sheet_names(token)
-
-# 更新元素 sheet 注释行
-for module in modules:
-    if module not in all_sheets:
-        logger.warning(
-            "元素 sheet【%s】不存在，跳过。可用: %s",
-            module, sorted(all_sheets),
-        )
-        continue
-    sid = get_sheet_id(token, module)
-    write_sheet_values(token, sid, start_row=1, start_col=1, values=[element_comments])
-    print(f"  OK 元素/{module} (注释行)")
-
 # ---- 预期结果 5 列注释 ----
 
 exp_header = ["模块", "匹配文本", "定位元素", "xml页面", "用途说明"]
@@ -177,19 +160,41 @@ exp_comments = [
     ]),
 ]
 
-# 更新预期结果 sheet 注释行 + 表头
-for module in modules:
-    sheet_name = f"预期结果【{module}】"
-    if sheet_name not in all_sheets:
-        logger.warning(
-            "预期结果 sheet【%s】不存在，跳过。可用: %s",
-            sheet_name, sorted(all_sheets),
-        )
-        continue
-    sid = get_sheet_id(token, sheet_name)
-    write_sheet_values(token, sid, start_row=1, start_col=1, values=[exp_comments])
-    print(f"  OK 预期结果/{sheet_name} (注释行)")
-    write_sheet_values(token, sid, start_row=2, start_col=1, values=[exp_header])
-    print(f"  OK 预期结果/{sheet_name} (表头行)")
 
-print("\n注释行全部更新完成")
+def main():
+    token = feishu_elements_token()
+    modules = ["通用"] + test_case_sheets()
+    all_sheets = list_sheet_names(token)
+
+    # 更新元素 sheet 注释行
+    for module in modules:
+        if module not in all_sheets:
+            logger.warning(
+                "元素 sheet【%s】不存在，跳过。可用: %s",
+                module, sorted(all_sheets),
+            )
+            continue
+        sid = get_sheet_id(token, module)
+        write_sheet_values(token, sid, start_row=1, start_col=1, values=[element_comments])
+        print(f"  OK 元素/{module} (注释行)")
+
+    # 更新预期结果 sheet 注释行 + 表头
+    for module in modules:
+        sheet_name = f"预期结果【{module}】"
+        if sheet_name not in all_sheets:
+            logger.warning(
+                "预期结果 sheet【%s】不存在，跳过。可用: %s",
+                sheet_name, sorted(all_sheets),
+            )
+            continue
+        sid = get_sheet_id(token, sheet_name)
+        write_sheet_values(token, sid, start_row=1, start_col=1, values=[exp_comments])
+        print(f"  OK 预期结果/{sheet_name} (注释行)")
+        write_sheet_values(token, sid, start_row=2, start_col=1, values=[exp_header])
+        print(f"  OK 预期结果/{sheet_name} (表头行)")
+
+    print("\n注释行全部更新完成")
+
+
+if __name__ == "__main__":
+    main()

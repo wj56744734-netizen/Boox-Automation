@@ -227,20 +227,24 @@ def use_local_excel() -> bool:
 
 # ---- 连通性检查 ----
 
-_FEISHU_REACHABLE_CACHE: bool | None = None
+_FEISHU_REACHABLE_CACHE = {"value": None, "timestamp": 0}
+_REACHABLE_TTL = 60  # 探测结果缓存 60 秒
 
 
 def check_feishu_reachable(timeout: int = 3) -> bool:
-    """快速检查飞书 API 是否可达（同进程内首次探测后缓存结果）。"""
-    global _FEISHU_REACHABLE_CACHE
-    if _FEISHU_REACHABLE_CACHE is not None:
-        return _FEISHU_REACHABLE_CACHE
+    """快速检查飞书 API 是否可达（60s TTL 缓存）。"""
+    now = time.time()
+    if _FEISHU_REACHABLE_CACHE["value"] is not None:
+        if now - _FEISHU_REACHABLE_CACHE["timestamp"] < _REACHABLE_TTL:
+            return _FEISHU_REACHABLE_CACHE["value"]
+
     try:
         requests.head("https://open.feishu.cn", timeout=timeout)
-        _FEISHU_REACHABLE_CACHE = True
+        _FEISHU_REACHABLE_CACHE["value"] = True
     except Exception:
-        _FEISHU_REACHABLE_CACHE = False
-    return _FEISHU_REACHABLE_CACHE
+        _FEISHU_REACHABLE_CACHE["value"] = False
+    _FEISHU_REACHABLE_CACHE["timestamp"] = now
+    return _FEISHU_REACHABLE_CACHE["value"]
 
 
 # ---- 本地缓存 ----

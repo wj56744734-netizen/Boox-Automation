@@ -94,11 +94,14 @@ def describe(locator: str | None) -> str | None:
     """根据 locator 字符串返回中文描述；命中不到返回 None。"""
     if not locator:
         return None
-    desc = ELEMENT_DESCRIPTIONS.get(locator)
-    if desc:
-        return desc
-    # 尝试在 args 字面里寻找已知 locator 子串（适配装饰器拿到的 `[name值]` 形态）
+    # 精确匹配优先
+    if locator in ELEMENT_DESCRIPTIONS:
+        return ELEMENT_DESCRIPTIONS[locator]
+    # 子串匹配兜底（取最长的匹配，避免短串误匹配覆盖更精确的匹配）
+    best = None
+    best_len = 0
     for known, text in ELEMENT_DESCRIPTIONS.items():
-        if known in locator:
-            return text
-    return None
+        if known in locator and len(known) > best_len:
+            best = text
+            best_len = len(known)
+    return best

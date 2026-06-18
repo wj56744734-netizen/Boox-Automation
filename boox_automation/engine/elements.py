@@ -10,6 +10,7 @@
 """
 from __future__ import annotations
 
+import difflib
 import logging
 import re
 from pathlib import Path
@@ -17,11 +18,13 @@ from pathlib import Path
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
+from boox_automation.engine.schema import (
+    ELEMENT_COL_MODULE, ELEMENT_COL_MATCH,
+    EXPECTED_COL_MODULE,
+)
 
 LOCATOR_TYPE_MAP = {
-    'id': By.ID,
     'xpath': By.XPATH,
-    'class_name': By.CLASS_NAME,
 }
 
 logger = logging.getLogger(__name__)
@@ -356,7 +359,18 @@ class ElementLoader:
         self._expected_modules: list[str] = []
         self._expected_sheets_found: list[str] = []
         self._expected_sheets_missing: list[str] = []
-        self._auto_discover()
+        self._loaded = False
+        self._load_lock = __import__('threading').Lock()
+
+    def _ensure_loaded(self):
+        """首次访问时触发元素和预期结果加载（线程安全）。"""
+        if self._loaded:
+            return
+        with self._load_lock:
+            if self._loaded:
+                return
+            self._auto_discover()
+            self._loaded = True
 
     def _auto_discover(self):
         """自动加载元素定义（云端优先 → 缓存兜底 → 本地 Excel）。
@@ -478,10 +492,10 @@ class ElementLoader:
             h_idx = _find_header_row(rows)
             headers = [str(c).strip() for c in rows[h_idx]]
             for row in rows[h_idx + 1:]:
-                if not row or not row[0]:
+                if not row or not row[ELEMENT_COL_MODULE]:
                     continue
-                a_val = str(row[0]).strip()
-                b_val = str(row[1]).strip() if len(row) > 1 and row[1] else ""
+                a_val = str(row[ELEMENT_COL_MODULE]).strip()
+                b_val = str(row[ELEMENT_COL_MATCH]).strip() if len(row) > ELEMENT_COL_MATCH and row[ELEMENT_COL_MATCH] else ""
                 # 旧格式: A列含'.' = 完整key; 新格式: A列=模块名, key=模块.匹配文本
                 key = a_val if "." in a_val or not b_val else f"{a_val}.{b_val}"
                 info = self._parse_row(row, headers, key=key)
@@ -756,7 +770,7 @@ class ElementLoader:
         }
 
         for row_idx_0, row in enumerate(rows[h_idx + 1:]):
-            if not row or not row[0]:
+            if not row or not row[EXPECTED_COL_MODULE]:
                 continue
 
             key = ""
@@ -777,7 +791,7 @@ class ElementLoader:
                 elif field == "element_checks":
                     info["element_checks"] = val
                 elif field == "action":
-                    info["action"] = val
+                    info["action"] = re.sub(r'\s+', '', val)
                 elif field == "description":
                     info["description"] = val
 
@@ -792,21 +806,24 @@ class ElementLoader:
                 logger.warning(f"预期结果第{row_idx_0 + h_idx + 2}行缺少 key（模块+匹配文本 或 元素标识），跳过")
                 continue
 
-            # E 列（操作）校验：不允许为空或无效
-            action = info.get("action", "")
-            if not action:
+            # E 列（操作）校验：不允许为空或无效，自动去空白（含内部）
+            action = info.get("action", "").strip()
+            action_clean = re.sub(r'\s+', '', action)
+            info["action"] = action_clean
+            if not action_clean:
                 logger.warning(f"预期结果【{key}】E列（操作）为空，跳过")
                 continue
-            if action not in _VALID_EXPECTED_ACTIONS:
+            if action_clean not in _VALID_EXPECTED_ACTIONS:
+                hints = difflib.get_close_matches(action_clean, _VALID_EXPECTED_ACTIONS, n=3, cutoff=0.3)
+                hint_text = f"，是否想填: {hints}" if hints else ""
                 logger.warning(
-                    f"预期结果【{key}】E列（操作）无效值'{action}'，"
-                    f"有效值: {_VALID_EXPECTED_ACTIONS}，跳过")
+                    f"E列无效值'{action_clean}'，有效值: {sorted(_VALID_EXPECTED_ACTIONS)}{hint_text}，跳过")
                 continue
 
             # toast 模式：不需要 C/D 列，match 用于 toast 文本
-            if action in ("断言toast", "断言toast不出现"):
+            if action_clean in ("断言toast", "断言toast不出现"):
                 if not match:
-                    logger.warning(f"预期结果【{key}】E列为'{action}'但B列（匹配文本）为空，跳过")
+                    logger.warning(f"预期结果【{key}】E列为'{action_clean}'但B列（匹配文本）为空，跳过")
                     continue
             else:
                 # visible / not_visible 模式：C/D 列至少有一个
@@ -823,10 +840,12 @@ class ElementLoader:
 
     def get_expected_page(self, key: str) -> dict | None:
         """按 key 获取预期结果页面信息。"""
+        self._ensure_loaded()
         return self._expected_results.get(key)
 
     def match_expected_result(self, tag: str) -> str:
         """按匹配文本查找预期结果 key，未匹配返回空字符串。"""
+        self._ensure_loaded()
         result = self._expected_match_index.get(tag, "")
         if not result:
             logger.debug(
@@ -838,6 +857,7 @@ class ElementLoader:
 
     def get_expected_diagnostics(self) -> dict:
         """获取预期结果加载的诊断信息，用于错误报告。"""
+        self._ensure_loaded()
         return {
             "modules": self._expected_modules,
             "sheets_found": self._expected_sheets_found,
@@ -884,7 +904,8 @@ class ElementLoader:
             if field in ("key",):
                 continue
             elif field == "action":
-                info["action"] = _ACTION_CN_TO_EN.get(val_str, val_str)
+                val_clean = re.sub(r'\s+', '', val_str)
+                info["action"] = _ACTION_CN_TO_EN.get(val_clean, val_clean)
             elif field == "locator":
                 blocks = _parse_device_blocks(val_str)
                 if len(blocks) > 1:
@@ -944,6 +965,7 @@ class ElementLoader:
         Raises:
             KeyError: element_key 不存在
         """
+        self._ensure_loaded()
         if element_key not in self._elements:
             available = ', '.join(sorted(self._elements.keys())[:20])
             raise KeyError(
@@ -1005,16 +1027,20 @@ class ElementLoader:
 
     def get_element_info_safe(self, element_key: str) -> dict | None:
         """返回元素信息字典（不抛异常），未找到返回 None。"""
+        self._ensure_loaded()
         return self._elements.get(element_key)
 
     def get_key_source(self, element_key: str) -> str | None:
         """返回元素键所在的 YAML 文件路径，未找到返回 None。"""
+        self._ensure_loaded()
         return self._key_source.get(element_key)
 
     def __contains__(self, element_key: str) -> bool:
+        self._ensure_loaded()
         return element_key in self._elements
 
     def __len__(self) -> int:
+        self._ensure_loaded()
         return len(self._elements)
 
 
@@ -1038,6 +1064,7 @@ class ElementMatcher:
         from boox_automation.engine.elements import get_element_loader
 
         loader = get_element_loader()
+        loader._ensure_loaded()
         for key, info in loader._elements.items():
             if not info.get("locator"):
                 continue  # 无 locator 的元素（如预期结果）不参与步骤操作匹配
@@ -1118,11 +1145,35 @@ class ElementMatcher:
                 return best
 
         if warn is True:
-            logger.warning(f"【{tag}】{ctx} 未匹配到任何元素")
+            self._warn_unmatched(tag, ctx)
         elif warn is False:
             logger.debug(f"【{tag}】{ctx} 未匹配到任何元素")
         # warn is None: 静默
         return ""
+
+    def _warn_unmatched(self, tag: str, ctx: str) -> None:
+        """未匹配时输出 WARNING，并建议最近匹配项。"""
+        hints = []
+        # 去空白后精确匹配到 → 提示可能是空白差异
+        stripped_tag = tag.strip()
+        if stripped_tag != tag:
+            for idx_key in self._index:
+                if idx_key.strip() == stripped_tag:
+                    hints.append(f"【{idx_key}】（仅空白差异，请统一空格）")
+                    break
+        # difflib 模糊匹配
+        if not hints:
+            candidates = list(self._index.keys())
+            # 加入元素 key 末段
+            for ek in self._index.values():
+                for k in ek:
+                    if "." in k:
+                        candidates.append(k.rsplit(".", 1)[1])
+            close = difflib.get_close_matches(stripped_tag, list(set(candidates)), n=3, cutoff=0.3)
+            if close:
+                hints = [f"【{c}】" for c in close]
+        hint_text = f"，最近似: {', '.join(hints)}" if hints else ""
+        logger.warning(f"【{tag}】{ctx} 未匹配到任何元素{hint_text}")
 
     def _pick_best(self, tag: str, candidates: list[str],
                    page_context: str, ctx: str, warn: bool = True) -> str:

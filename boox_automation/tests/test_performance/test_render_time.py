@@ -308,7 +308,7 @@ class Test_Render_Time:
 
     @pytest.mark.cleanup_app_data
     @pytest.mark.cleanup_storage_files
-    def test_render_time(self, note_test_initial):
+    def test_render_time(self, note_perf_initial):
         version_str = self.public.get_version(short=True)
 
         if version_str in {"4.0", "4.1", "4.0.3", "4.0.2", "4.0.1", "4.1.1", "4.2", "dev"}:

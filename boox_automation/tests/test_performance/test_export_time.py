@@ -336,7 +336,7 @@ class Test_Note_Export_Time:
 
     @pytest.mark.cleanup_app_data
     @pytest.mark.cleanup_storage_files
-    def test_note_export_time(self, note_test_initial):
+    def test_note_export_time(self, note_perf_initial):
 
         self.public.enter_note_app()
         self.method.xpath_text_click(element_key="笔记首页.无笔记状态创建按钮")

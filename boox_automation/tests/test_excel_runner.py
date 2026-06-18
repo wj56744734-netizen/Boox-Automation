@@ -275,9 +275,9 @@ def _make_case_id(case: ParsedCase) -> str:
 
 
 # ── 用例收集 ──
-from boox_automation.core.config import test_case_sheets
+from boox_automation.core.config import test_case_sheets as _test_case_sheets
 from boox_automation.core.feishu import use_local_excel
-_sheets = test_case_sheets()
+_sheets = _test_case_sheets()
 logger.debug(
     f"用例收集配置: 目标工作表={_sheets}, "
     f"优先级筛选={PRIORITY_FILTER}, "
@@ -436,10 +436,6 @@ def _dispatch_step(method, public, step):
     elif step.action == "skip":
         pass  # 检查/查看/校验步骤，不需要 UI 操作
 
-    elif step.action in ("swipe_up", "swipe_down", "swipe_left", "swipe_right"):
-        direction = step.action.replace("swipe_", "")
-        method.swipe_direction(direction)
-
     elif step.action == "click_coord":
         method.click_by_coord(ek)
 
@@ -448,9 +444,6 @@ def _dispatch_step(method, public, step):
 
     elif step.action == "swipe_coord":
         method.swipe_by_coord(ek)
-
-    elif step.action == "press_back":
-        method.press_back()
 
     else:
         logging.warning(f"步骤{step.seq}: 【{step.tag}】未知动作类型: {step.action}")
@@ -484,18 +477,20 @@ def _check_expected_by_tag(method, expected_by_tag: dict, consumed: dict, step, 
         )
 
     ep = entries[idx]
-    ep.step_seq = step.seq  # 回填步骤号（用于日志/报错）
+    ep.step_seq = step.seq
     consumed[tag] = idx + 1
 
     if not ep.expected_key:
         ep.status = "fail"
         from boox_automation.engine.elements import get_element_loader
+        from boox_automation.engine.diagnostics import (
+            expected_sheet_not_found, expected_tag_not_matched,
+        )
         loader = get_element_loader()
         diag = loader.get_expected_diagnostics()
 
         modules = diag.get("modules", [])
         found = diag.get("sheets_found", [])
-        missing = diag.get("sheets_missing", [])
         match_index = diag.get("match_index", {})
         total = diag.get("total_results", 0)
 
@@ -503,42 +498,14 @@ def _check_expected_by_tag(method, expected_by_tag: dict, consumed: dict, step, 
         module_hint = (modules[1] if len(modules) > 1 else (modules[0] if modules else "模块名"))
 
         if total == 0 and not found:
-            # 情况A：完全没有加载到任何预期结果工作表
-            missing_str = '、'.join(missing) if missing else '、'.join(searched)
             raise AssertionError(
                 f"步骤{step.seq}：检查【{tag}】已关联到用例I列，但未加载到任何预期结果工作表。\n"
-                f"──────────────────────────────────────────────────\n"
-                f"  原因: 飞书元素表中不存在以下预期结果工作表:\n"
-                + "\n".join(f"    {s} → 缺失" for s in searched) + "\n"
-                f"  ────────────────────────────────────────────────\n"
-                f"  解决方式:\n"
-                f"    1. 在飞书元素表中新建「预期结果【{module_hint}】」工作表\n"
-                f"       表头: 模块 | 匹配文本 | 定位元素 | xml页面 | 操作 | 用途说明\n"
-                f"       数据行: {module_hint} | {tag} | (XPath或留空) | (XML或留空) | 断言存在 | (说明)\n"
-                f"    2. 或将预期页面 XML 放入本地文件:\n"
-                f"       data/expected_pages/{module_hint}.{tag}.xml\n"
-                f"──────────────────────────────────────────────────"
+                + expected_sheet_not_found(searched, module_hint)
             )
         else:
-            # 情况B：有预期结果工作表，但 B 列未匹配
-            found_str = '、'.join(found) if found else "无"
-            index_str = '、'.join(sorted(match_index.keys())) if match_index else "(空)"
             raise AssertionError(
                 f"步骤{step.seq}：检查【{tag}】已关联到用例I列，但在预期结果工作表的 B 列中未找到匹配。\n"
-                f"──────────────────────────────────────────────────\n"
-                f"  已加载预期结果工作表: {found_str}\n"
-                f"  已加载预期结果条目: {total}\n"
-                f"  当前 B 列已有匹配文本({len(match_index)}条): {index_str}\n"
-                f"  未匹配的文本: 【{tag}】\n"
-                f"  ────────────────────────────────────────────────\n"
-                f"  解决方式:\n"
-                f"    在「预期结果【{module_hint}】」工作表中新增一行:\n"
-                f"    B 列（匹配文本）: {tag}\n"
-                f"    C 列（定位元素）: 填入对应 XPath\n"
-                f"    D 列（xml页面）: 填入 Appium Inspector 导出的页面 XML\n"
-                f"    E 列（操作）: 断言存在 / 断言不存在 / 断言toast / 断言toast不出现\n"
-                f"    注意: B 列文字必须与 I 列【{tag}】完全一致\n"
-                f"──────────────────────────────────────────────────"
+                + expected_tag_not_matched(tag, found, total, match_index, module_hint)
             )
 
     try:

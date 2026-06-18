@@ -7,9 +7,8 @@ import fnmatch
 # 关键：非 TTY 环境下强制 stdout 行缓冲，实现日志实时输出
 sys.stdout.reconfigure(line_buffering=True)
 
-from boox_automation.ui_ops.operations import Operation_method
 from boox_automation.devices.info import Device_basic_information
-from boox_automation.driver import driver, ensure_driver_alive
+from boox_automation.driver import driver, ensure_driver_alive, init_driver
 from boox_automation.core.health import ensure_adb_device_ready, run_adb_command_with_retry, ensure_device_awake
 import pytest
 import time
@@ -84,8 +83,10 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "cleanup_storage_files: 测试前清理存储文件（rm -rf）")
 
     # 配置日志级别（由 pytest.ini 的 log_cli 统一管理输出）
+    # NOTE_LOG_LEVEL 环境变量可覆盖（调试时设为 DEBUG）
+    log_level = os.getenv("NOTE_LOG_LEVEL", "INFO").upper()
     root_logger = logging.getLogger()
-    root_logger.setLevel(logging.INFO)
+    root_logger.setLevel(getattr(logging, log_level, logging.INFO))
     # 清除已有的 handler（避免重复输出），加 NullHandler 防止 lastResort
     for handler in root_logger.handlers[:]:
         root_logger.removeHandler(handler)
@@ -156,7 +157,7 @@ def _likely_needs_device(session):
     for p in candidates:
         try:
             with open(p, encoding="utf-8") as fh:
-                if "note_test_initial" in fh.read():
+                if "note_test_initial" in fh.read() or "note_perf_initial" in fh.read():
                     return True
         except Exception:
             continue
@@ -407,10 +408,6 @@ def note_test_initial(request):
                 f"Driver 连续 {_DRIVER_FAILURE_COUNT} 次重建失败，终止测试 session: {_compact_exc_text(e)}"
             )
         pytest.fail(str(e), pytrace=False)
-    method = Operation_method(driver)
-    from boox_automation.tests.helpers import Public_method
-    public = Public_method()
-
     if not DEVICE_INFO_PRINTED:
         """"" 打印设备信息 """""
         devices.basic_device_information(device_id)
@@ -455,3 +452,54 @@ def note_test_initial(request):
     if teardown_home_error:
         logging.warning(teardown_home_error)
     logging.debug("测试完成，返回主页")
+
+
+@pytest.fixture(scope='function')
+def note_perf_initial(request):
+    """性能测试专用 fixture：轻量探活，无飞书依赖，无 HOME precheck。
+
+    与 note_test_initial 的区别：
+    - 不做 ensure_driver_alive 重试（失败直接 init_driver 重建一次）
+    - 不打印设备信息
+    - 不处理"开始使用"引导
+    - teardown 不做探活，HOME 失败只 WARNING
+    """
+    devices = Device_basic_information()
+
+    device_id = None
+    device_error = None
+    try:
+        device_id = devices.get_connected_device_ids()
+    except RuntimeError as e:
+        device_error = str(e)
+    if device_id is None:
+        pytest.fail(f"未检测到已连接设备（{device_error}），请连接设备后再运行测试", pytrace=False)
+
+    # 清理由 marker 控制
+    needs_clean_app_data = request.node.get_closest_marker('cleanup_app_data') is not None
+    needs_clean_storage = request.node.get_closest_marker('cleanup_storage_files') is not None
+
+    if needs_clean_app_data:
+        adb_clean_app_data(device_id)
+    if needs_clean_storage:
+        adb_clean_storage_files(device_id)
+
+    ensure_device_awake(device_id)
+
+    # 仅一次探活，失败直接重建（不重试）
+    try:
+        driver.current_package
+    except Exception:
+        real_driver = init_driver()
+        driver.set_driver(real_driver)
+
+    driver.press_keycode(3)
+    time.sleep(2)
+
+    yield
+
+    # 轻量 teardown：HOME 失败不重试
+    try:
+        driver.press_keycode(3)
+    except Exception:
+        logging.warning("性能测试后 HOME 失败（设备可能已掉线），不重试")

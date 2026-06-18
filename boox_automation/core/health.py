@@ -44,6 +44,13 @@ def ensure_appium_server(auto_start=True, startup_timeout=None):
     if not auto_start:
         raise RuntimeError(f"Appium 未启动：{host}:{port}")
 
+    # 检查旧进程是否仍存活
+    if _appium_process is not None:
+        if _appium_process.poll() is None:
+            logging.info(f"复用已有 Appium 进程（pid={_appium_process.pid}）")
+            return True
+        logging.debug("旧 Appium 进程已退出，释放引用")
+
     logging.debug(f"检测到 Appium 未监听 {host}:{port}，尝试自动拉起：{appium_cmd}")
     _appium_process = subprocess.Popen(
         shlex.split(appium_cmd),
@@ -74,6 +81,7 @@ def ensure_adb_device_ready(device_id, retries=None, retry_delay=None):
             ["adb", "-s", device_id, "get-state"],
             capture_output=True,
             text=True,
+            timeout=10,
         )
         state = (result.stdout or "").strip()
         if result.returncode == 0 and state == "device":
@@ -90,7 +98,7 @@ def ensure_device_awake(device_id):
     """确保设备屏幕处于唤醒状态，休眠则自动点亮。"""
     result = subprocess.run(
         ["adb", "-s", device_id, "shell", "dumpsys", "power"],
-        capture_output=True, text=True,
+        capture_output=True, text=True, timeout=10,
     )
     if "mWakefulness=Awake" in (result.stdout or ""):
         return
@@ -98,7 +106,7 @@ def ensure_device_awake(device_id):
     logging.info("设备屏幕休眠，尝试唤醒...")
     subprocess.run(
         ["adb", "-s", device_id, "shell", "input", "keyevent", "26"],
-        capture_output=True, text=True,
+        capture_output=True, text=True, timeout=10,
     )
     time.sleep(1)
 
@@ -130,12 +138,15 @@ def run_adb_command_with_retry(command, retries=None, retry_delay=None):
             text=True,
             bufsize=1,
         ) as process:
-            stdout, stderr = process.communicate()
+            stdout, stderr = process.communicate(timeout=30)
             if process.returncode == 0:
                 return stdout
             last_error = (stderr or stdout or "").strip()
+            # 设备断连时重试无意义，直接失败
+            if "device" in last_error and "not found" in last_error:
+                raise RuntimeError(f"ADB命令执行失败（设备断连）：{command} | 错误：{last_error}")
             logging.warning(
                 f"ADB命令失败（第 {attempt}/{retries} 次）：{command} | 错误：{last_error}"
             )
-        time.sleep(retry_delay)
+            time.sleep(retry_delay)
     raise RuntimeError(f"ADB命令执行失败：{command} | 最终错误：{last_error}")

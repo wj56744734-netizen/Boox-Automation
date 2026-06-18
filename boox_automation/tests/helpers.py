@@ -20,23 +20,28 @@ import logging
 import time
 import re
 
-# 获取设备基础信息
 devices = Device_basic_information()
-try:
-    device_info = devices.get_device_info()
-except RuntimeError:
-    device_info = None
 
-if device_info:
-    device_region = device_info.get('device_region')
-    version_info = device_info.get('version_info')
-    device_size = device_info.get('device_size')
-    device_id = device_info.get('device_id')
-else:
-    device_region = None
-    version_info = None
-    device_size = None
-    device_id = None
+_device_info_cache = None
+_DEVICE_INFO_KEYS = {'device_region', 'version_info', 'device_size', 'device_id'}
+
+
+def _get_device_info():
+    """懒加载设备信息：首次访问时获取，后续命中缓存。"""
+    global _device_info_cache
+    if _device_info_cache is None:
+        try:
+            _device_info_cache = devices.get_device_info()
+        except RuntimeError:
+            _device_info_cache = {}
+    return _device_info_cache
+
+
+def __getattr__(name):
+    if name in _DEVICE_INFO_KEYS:
+        info = _get_device_info()
+        return info.get(name) if info else None
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 class Public_method:
 
@@ -118,6 +123,9 @@ class Public_method:
         if document_format in ("png", "jpeg", "jpg"):
             target_logs = [open_note]
             single_timeout = 5
+        elif document_format == "pdf":
+            target_logs = [doc_to_note, open_note]
+            single_timeout = 100
         else:
             target_logs = [document_convert, doc_to_note, open_note]
             single_timeout = 100
@@ -129,7 +137,36 @@ class Public_method:
         )
         time.sleep(1)
         self.method.xpath_text_click(name=f'{click_key}')
-        logs = self.logcat.wait_result(timeout=single_timeout + 5)
+
+        deadline = time.time() + single_timeout + 5
+        while time.time() < deadline:
+            if not self.logcat.is_running():
+                break
+
+            # 首次导入时检查工具条引导并关闭（引导弹窗会遮挡笔记标题）
+            if toolbar:
+                try:
+                    self.driver.find_element(By.ID, "com.onyx.android.note:id/tv_title")
+                    self.method.xpath_text_click(name='知道了')
+                    continue
+                except Exception:
+                    pass
+
+            if template_text:
+                try:
+                    safe = str(template_text).replace("'", "\\'")
+                    self.driver.find_element(By.XPATH, f"//*[@text='{safe}']")
+                    self.logcat.stop_capture()
+                    break
+                except Exception:
+                    pass
+
+            time.sleep(3)
+
+        if self.logcat.is_running():
+            self.logcat.stop_capture()
+
+        logs = self.logcat.wait_result(timeout=2) or {}
 
         detailed_matches = logs.get("detailed_matches", {}) if logs else {}
         for k, v in detailed_matches.items():
@@ -151,17 +188,15 @@ class Public_method:
             message = logs.get('message', '未知错误')
             unmatched = logs.get('unmatched_targets', [])
 
-            if document_format in ("png", "jpeg", "jpg") and open_time == "0" and template_text:
+            # 图片/PDF 日志缺失但已进入笔记页 → 正常现象（导入过快不打印日志），INFO 级别
+            if document_format in ("png", "jpeg", "jpg", "pdf") and template_text:
                 entered_note = self.method.xpath_text_click(template_text, should_click=None)
                 if entered_note:
-                    open_time = "0"
-                    logging.warning(
-                        f"图片导入已进入笔记页，但未捕获到耗时日志，文档类型：{document_format}，模板文本：{template_text}"
-                    )
+                    logging.info(f"导入耗时日志部分缺失（导入过快未打印），文档类型：{document_format}")
                 else:
                     logging.error(
-                        f"图片导入日志缺失且页面模板文本未显示，文档类型：{document_format}，"
-                        f"原因：{message}，未捕获：{unmatched}"
+                        f"导入日志缺失且页面模板文本未显示，文档类型：{document_format}，"
+                        f"模板文本：{template_text}，可能原因：1) 应用崩溃 2) 导入仍在进行 3) 标题文本不匹配"
                     )
             else:
                 logging.error(f"导入耗时日志捕获失败，文档类型：{document_format}，原因：{message}，未捕获：{unmatched}")
@@ -218,7 +253,10 @@ class Public_method:
     def import_file(self, file_route_name, file_route_name2):
 
         def circular_swipe(swipe):
-            while True:
+            max_iterations = 50
+            iterations = 0
+            while iterations < max_iterations:
+                iterations += 1
                 page = self.method.obtain_element_text(by_method='xpath',
                                                        locator='//android.widget.TextView[@resource-id="com.onyx.android.note:id/page_info"]')
                 page = page.split("/")
@@ -234,6 +272,9 @@ class Public_method:
                 if swipe > total_pages:
                     logging.warning(f"目标页{swipe}超过总页数{total_pages}")
                     return False
+
+            logging.error(f"circular_swipe 在 {max_iterations} 次翻页后仍未到达目标页 {swipe}")
+            return False
 
         logging.debug(f"首次进入文件夹层级：{file_route_name} → {file_route_name2}")
         self.get_file(file_route_name, file_route_name2)

@@ -140,17 +140,6 @@ logcat:
   # 单次日志捕获最大等待时间（性能测试中抓取特定 log tag 用）
   capture_timeout: 80     # 秒
 
-# ==================== 截图配置 ====================
-screenshot:
-  # 失败截图保存目录
-  dir: 'Test_report/screenshots'
-
-  # 截图文件名前缀
-  prefix: '失败'
-
-  # 是否启用失败自动截图
-  enabled: true
-
 # ==================== Toast 检测配置 ====================
 toast:
   # Toast 文本匹配超时
@@ -185,11 +174,3 @@ cache:
 
   # 缓存文件目录（相对于 boox_automation/）
   dir: "data/.cache"
-
-# ==================== 项目配置 ====================
-project:
-  # 项目名称，用于日志和报告标题
-  name: 'boox_automation'
-
-  # Driver 导入路径（fallback，正常情况下从实例获取）
-  driver_import_path: 'boox_automation.driver.driver'

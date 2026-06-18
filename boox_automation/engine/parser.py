@@ -8,14 +8,22 @@ _TAG_RE = re.compile(r"【(.+?)】")
 _STEP_RE = re.compile(r"(\d+)[\.\、](.*)")
 _VERSION_COND_RE = re.compile(r"^\d+\.\d+\.\d+-版本执行$")
 
-# ---- 条件型前置：关键字 → 设备字段 + 期望值 ----
-_CONDITION_KEYWORDS: dict[str, tuple[str, str]] = {
-    "国内设备执行": ("device_region", "国内"),
-    "海外设备执行": ("device_region__in", "海外,全球"),
-    "平板设备执行": ("devices_reader", "平板"),
-    "阅读器设备执行": ("devices_reader", "阅读器"),
-    "黑白设备执行": ("driver_colour", "黑白"),
-    "彩色设备执行": ("driver_colour", "彩色"),
+# ---- 条件型前置：关键字 → (设备字段, 操作符, 期望值) ----
+# 同时兼容旧 _CONDITION_KEYWORDS 格式（前缀 __in 表 in 操作）
+
+_COND_SPEC: dict[str, tuple[str, str, str]] = {
+    "国内设备执行": ("device_region", "eq", "国内"),
+    "海外设备执行": ("device_region", "in", "海外,全球"),
+    "平板设备执行": ("devices_reader", "eq", "平板"),
+    "阅读器设备执行": ("devices_reader", "eq", "阅读器"),
+    "黑白设备执行": ("driver_colour", "eq", "黑白"),
+    "彩色设备执行": ("driver_colour", "eq", "彩色"),
+}
+
+# 向后兼容：旧 _CONDITION_KEYWORDS 格式 (字段, 期望值)，in 操作通过 __in 后缀编码
+_CONDITION_KEYWORDS = {
+    k: (f"{v[0]}__in" if v[1] == "in" else v[0], v[2])
+    for k, v in _COND_SPEC.items()
 }
 
 
@@ -177,16 +185,6 @@ def _detect_action(text: str, tag: str) -> str:
         return "click"
     return "skip"
 
-
-# 条件关键字 → (设备字段, 操作符, 期望值)
-_COND_SPEC: dict[str, tuple[str, str, str]] = {
-    "国内设备执行": ("device_region", "eq", "国内"),
-    "海外设备执行": ("device_region", "in", "海外,全球"),
-    "平板设备执行": ("devices_reader", "eq", "平板"),
-    "阅读器设备执行": ("devices_reader", "eq", "阅读器"),
-    "黑白设备执行": ("driver_colour", "eq", "黑白"),
-    "彩色设备执行": ("driver_colour", "eq", "彩色"),
-}
 
 # 条件关键字 → 人类可读的字段中文名（用于 skip 原因展示）
 _FIELD_LABEL: dict[str, str] = {

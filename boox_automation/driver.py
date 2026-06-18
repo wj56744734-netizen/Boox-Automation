@@ -1,6 +1,5 @@
 import logging
 import subprocess
-import sys
 import os
 
 from appium import webdriver
@@ -50,22 +49,39 @@ def _compact_error_text(error_text):
 def _friendly_driver_error(error_text):
     compact = _compact_error_text(error_text)
     lowered = compact.lower()
-    if "Connection refused" in compact or "Max retries exceeded" in compact:
+
+    # 设备不在线
+    if "device" in lowered and "not found" in lowered:
+        return f"设备不在线：{compact}"
+
+    # Driver session 失效
+    if "could not retrieve the currently focused package" in lowered:
+        return f"Driver session 失效（无法获取当前包名），原错误：{compact}"
+
+    # Appium 服务端错误
+    if "an unknown server-side error occurred" in lowered:
+        return f"Appium 服务端错误：{compact}"
+
+    # 连接层错误
+    if "connection refused" in lowered or "max retries exceeded" in lowered:
         return "Appium 未连接或不可用（已尝试自动连接），请确认 Appium Server 正常后再运行测试。"
-    if (
-        "could not proxy command to the remote server" in lowered
-        or "socket hang up" in lowered
-        or "the session identified by" in lowered
-        or "nosuchdriverexception" in lowered
-        or "cannot be proxied to uiautomator2 server" in lowered
-        or "instrumentation process is not running" in lowered
-    ):
+
+    # session 异常
+    if any(kw in lowered for kw in (
+        "could not proxy command", "socket hang up",
+        "the session identified by", "nosuchdriverexception",
+        "cannot be proxied to uiautomator2 server",
+        "instrumentation process is not running",
+    )):
         return "Appium 未连接或会话异常（已尝试自动连接），请先连接 Appium 后再开始测试。"
-    if "UiAutomation not connected" in compact:
+
+    # 自动化通道未连接
+    if "uiautomation not connected" in lowered:
         return (
             "Driver 初始化失败：设备自动化通道未连接（UiAutomation not connected）。"
             "请重启目标设备的开发者选项/USB调试或重启 Appium 后重试。"
         )
+
     return f"Driver 初始化失败：{compact or error_text}"
 
 
@@ -101,8 +117,8 @@ def _build_driver_options():
     return options
 
 
-def init_driver(exit_on_fail=True):
-    """初始化并绑定真实 driver 到代理层"""
+def init_driver():
+    """初始化并绑定真实 driver 到代理层，失败时抛出 RuntimeError。"""
     try:
         from boox_automation.core.config import appium_host, appium_port
 
@@ -119,8 +135,6 @@ def init_driver(exit_on_fail=True):
     except Exception as e:
         friendly_msg = _friendly_driver_error(str(e))
         logging.error(friendly_msg)
-        if exit_on_fail:
-            sys.exit(friendly_msg)
         raise RuntimeError(friendly_msg) from e
 
 
@@ -129,7 +143,7 @@ def ensure_driver_alive(reason=None):
     real_driver = driver.get_driver()
     try:
         if real_driver is None:
-            real_driver = init_driver(exit_on_fail=False)
+            real_driver = init_driver()
         # 触发多次轻量请求验证会话可用性（覆盖 UiAutomator2 掉线场景）
         _ = real_driver.current_package
         _ = real_driver.current_activity
@@ -147,7 +161,7 @@ def ensure_driver_alive(reason=None):
                 except Exception:
                     pass
                 driver.clear_driver()
-            real_driver = init_driver(exit_on_fail=False)
+            real_driver = init_driver()
             _ = real_driver.current_package
             _ = real_driver.current_activity
             _ = real_driver.get_window_size()

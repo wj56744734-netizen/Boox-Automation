@@ -6,6 +6,7 @@ from boox_automation.tests.helpers import Public_method
 from boox_automation.driver import driver
 from selenium.webdriver.common.by import By
 import allure
+import logging
 import pytest
 
 @allure.feature("笔记导入、导出文件相关测试类")
@@ -18,12 +19,15 @@ class Test_import_the_file:
 
     @pytest.mark.cleanup_app_data
     @pytest.mark.cleanup_storage_files
-    def test_4_local_file_note(self, note_test_initial):
+    def test_4_local_file_note(self, note_perf_initial):
         """""
         回归用例P0 ---
         自动化用例 ： 用于测试在未登录状态下导入各种暂时支持的文件格式的完整流程
         测试前需要将指定文件放入设备根目录---
         """""
+        logging.info("=" * 60)
+        logging.info("  性能测试：从本地文件导入")
+        logging.info("=" * 60)
         self.public.enter_note_app()
 
         #点击"创建笔记"按钮
@@ -36,6 +40,8 @@ class Test_import_the_file:
         self.public.import_file_bootstrap("选择文件即可创建笔记","知道了")
 
         #进入指定文件路径，并导入此路径下的全部文档
-        self.public.import_file(TEST_FILES_DISPLAY_ROOT, TEST_FILES_DIR_LOCAL_FILE)
+        imported_files = self.public.import_file(TEST_FILES_DISPLAY_ROOT, TEST_FILES_DIR_LOCAL_FILE)
+        assert len(imported_files) > 0, f"未导入任何文件，导入流程可能失败"
+        logging.info(f"成功导入 {len(imported_files)} 个文件")
 
 

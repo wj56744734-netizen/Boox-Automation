@@ -452,15 +452,6 @@ class Base_note_class:
         else:
             raise AssertionError("必须提供 element_key 或 (by, locator)")
 
-    @staticmethod
-    def _validate_locator_type(locator_type, allowed_types, context=""):
-        """验证定位类型是否合法。"""
-        if locator_type not in allowed_types:
-            allowed_str = ", ".join(str(t) for t in allowed_types)
-            raise AssertionError(
-                f"{context} 定位类型错误：需要 {allowed_str}，实际为 {locator_type}"
-            )
-
     # ---- 安全点击 / 长按 / 输入 ----
 
     @staticmethod
@@ -1051,8 +1042,6 @@ class Operation_method(Base_note_class):
             _push_element_ctx('by_element_click', element_key)
             loc = self._resolve_locator(element_key)
             locator_type, locator_value = loc['by'], loc['value']
-            self._validate_locator_type(locator_type, (By.ID, By.CLASS_NAME),
-                                        f"by_element_click[{element_key}]")
             step_msg = f"「{loc['operation']}」"
         elif by_method is not None and locator is not None:
             _push_element_ctx('by_element_click', None)
@@ -1465,23 +1454,6 @@ class Operation_method(Base_note_class):
             logging.debug(f"执行屏幕滑动：起点({start_x},{start_y}) → 终点({end_x},{end_y})")
             return True
 
-    # ---- 方向滑动 ----
-
-    def swipe_direction(self, direction: str):
-        """全屏方向滑动。direction: up/down/left/right。"""
-        direction_map = {
-            "up": (0.5, 0.35, 0.5, 0.65),
-            "down": (0.5, 0.65, 0.5, 0.35),
-            "left": (0.65, 0.5, 0.35, 0.5),
-            "right": (0.35, 0.5, 0.65, 0.5),
-        }
-        if direction not in direction_map:
-            raise ValueError(f"不支持的滑动方向: {direction}，可选: {list(direction_map.keys())}")
-        x1, y1, x2, y2 = direction_map[direction]
-        with allure.step(f"方向滑动 {direction}"):
-            self.click_slice(x1, y1, x2, y2)
-            self._settle_ui()
-
     # ---- 坐标操作 ----
 
     def click_by_coord(self, element_key: str):
@@ -1546,15 +1518,6 @@ class Operation_method(Base_note_class):
             self._settle_ui()
             logging.debug(f"[swipe_by_coord] 坐标滑动成功: ({x1:.2f},{y1:.2f})→({x2:.2f},{y2:.2f}) "
                           f"像素({start_x},{start_y})→({end_x},{end_y}) {duration}ms")
-
-    # ---- 系统键 ----
-
-    def press_back(self):
-        """按系统返回键（Android keycode 4）。"""
-        with allure.step("按返回键"):
-            self.driver.press_keycode(4)
-            self._settle_ui()
-            logging.debug("[press_back] 返回键已按下")
 
     # ---- 等待弹窗消失 ----
 

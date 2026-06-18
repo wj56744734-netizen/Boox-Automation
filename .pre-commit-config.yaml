@@ -1,0 +1,9 @@
+repos:
+  - repo: local
+    hooks:
+      - id: syntax-check
+        name: Python 语法检查
+        entry: python -m py_compile
+        language: system
+        files: \.py$
+        types: [python]

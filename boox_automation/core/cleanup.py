@@ -24,7 +24,7 @@ from boox_automation.core.paths import (
 logger = logging.getLogger(__name__)
 
 
-def _keep_latest(parent: Path, keep: int) -> tuple[int, int]:
+def _keep_latest(parent: Path, keep: int, dry_run: bool = False) -> tuple[int, int]:
     """按 mtime 倒序保留最新 keep 个子项，返回 (删除条数, 删除字节)。"""
     if not parent.exists():
         return 0, 0
@@ -34,6 +34,15 @@ def _keep_latest(parent: Path, keep: int) -> tuple[int, int]:
         reverse=True,
     )
     to_delete = entries[keep:]
+    if not to_delete:
+        return 0, 0
+    if dry_run:
+        total_size = 0
+        for path in to_delete:
+            size = _dir_size(path) if path.is_dir() else path.stat().st_size
+            total_size += size
+            logger.info(f"[DRY RUN] 将删除: {path} ({_format_size(size)})")
+        return len(to_delete), total_size
     removed = 0
     freed = 0
     for path in to_delete:
@@ -71,7 +80,7 @@ def _format_size(num: int) -> str:
     return f"{n:.1f}TB"
 
 
-def cleanup_artifacts(keep_latest: int = DEFAULT_KEEP_LATEST) -> dict:
+def cleanup_artifacts(keep_latest: int = DEFAULT_KEEP_LATEST, dry_run: bool = False) -> dict:
     """对各分类目录按 keep_latest 策略清理；返回每类统计。"""
     targets = {
         "allure_results": ALLURE_RESULTS_ROOT,
@@ -81,18 +90,20 @@ def cleanup_artifacts(keep_latest: int = DEFAULT_KEEP_LATEST) -> dict:
     }
     summary: dict = {}
     for name, parent in targets.items():
-        removed, freed = _keep_latest(parent, keep_latest)
+        removed, freed = _keep_latest(parent, keep_latest, dry_run=dry_run)
         if removed:
-            logger.info(
-                f"[artifacts] 清理 {name}：删除 {removed} 项，释放 {_format_size(freed)}"
-            )
+            tag = "[DRY RUN]" if dry_run else "[artifacts]"
+            logger.info(f"{tag} 清理 {name}：删除 {removed} 项，释放 {_format_size(freed)}")
         summary[name] = {"removed": removed, "freed_bytes": freed}
     # tmp 目录单独处理：全清
     if TMP_ROOT.exists():
         freed = _dir_size(TMP_ROOT)
-        shutil.rmtree(TMP_ROOT, ignore_errors=True)
-        if freed:
-            logger.info(f"[artifacts] 清理 tmp：释放 {_format_size(freed)}")
+        if dry_run:
+            logger.info(f"[DRY RUN] tmp：将删除目录，释放 {_format_size(freed)}")
+        else:
+            shutil.rmtree(TMP_ROOT, ignore_errors=True)
+            if freed:
+                logger.info(f"[artifacts] 清理 tmp：释放 {_format_size(freed)}")
         summary["tmp"] = {"removed": 1, "freed_bytes": freed}
     else:
         summary["tmp"] = {"removed": 0, "freed_bytes": 0}
@@ -100,15 +111,21 @@ def cleanup_artifacts(keep_latest: int = DEFAULT_KEEP_LATEST) -> dict:
 
 
 def main():
+    dry_run = "--dry-run" in sys.argv
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] | %(name)s | %(message)s",
         stream=sys.stdout,
     )
-    summary = cleanup_artifacts()
+    if dry_run:
+        logger.info("[DRY RUN] 以下为模拟清理，不会实际删除文件")
+    summary = cleanup_artifacts(dry_run=dry_run)
     total_removed = sum(item["removed"] for item in summary.values())
     total_freed = sum(item["freed_bytes"] for item in summary.values())
-    logger.info(f"清理完成：共删除 {total_removed} 项，释放 {_format_size(total_freed)}")
+    if dry_run:
+        logger.info(f"[DRY RUN] 模拟完成：将删除 {total_removed} 项，释放 {_format_size(total_freed)}")
+    else:
+        logger.info(f"清理完成：共删除 {total_removed} 项，释放 {_format_size(total_freed)}")
 
 
 if __name__ == "__main__":
