@@ -4,7 +4,7 @@
 约定：
   - 每个 Sheet 对应一个页面，Sheet 名 = 页面名
   - 每个元素包含 'locator' 字段，格式为 [type_string, value_string]
-  - type_string 支持: id, xpath, class_name, accessibility_id
+  - type_string 支持: id, xpath, class_name
   - 可选字段: match, action, operation, index
   - locator 列支持多设备「键：」分块格式
 """
@@ -17,15 +17,11 @@ from pathlib import Path
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
-from appium.webdriver.common.appiumby import AppiumBy
 
 LOCATOR_TYPE_MAP = {
     'id': By.ID,
     'xpath': By.XPATH,
     'class_name': By.CLASS_NAME,
-    'accessibility_id': AppiumBy.ACCESSIBILITY_ID,
-    'name': By.NAME,
-    'tag_name': By.TAG_NAME,
 }
 
 logger = logging.getLogger(__name__)
@@ -41,11 +37,6 @@ _ACTION_CN_TO_EN = {
     "滑动": "swipe_coord",
 }
 
-# 设备级 action（不需要元素匹配，纯关键词驱动）
-_DEVICE_ACTIONS = {
-    "swipe_up", "swipe_down", "swipe_left", "swipe_right",
-    "press_back",
-}
 
 
 # ---- 多设备块解析（元素 C 列 + 预期结果 C 列通用） ----
@@ -54,7 +45,7 @@ _DEVICE_ACTIONS = {
 _EXPECTED_SHEET_MODULE_RE = re.compile(r"预期结果【(.+?)】")
 
 # 表头关键字（用于自动检测哪行是表头）
-_HEADER_KEYWORDS = {"模块", "元素标识", "匹配文本", "定位方式", "定位元素", "操作类型", "操作", "页面XML", "xml页面", "检查元素", "用途说明"}
+_HEADER_KEYWORDS = {"模块", "元素标识", "匹配文本", "定位方式", "定位元素", "操作类型", "操作", "页面XML", "xml页面", "检查元素", "用途说明", "断言存在", "断言不存在", "断言toast", "断言toast不出现"}
 
 
 def _find_header_row(rows: list, default: int = 1) -> int:
@@ -71,13 +62,24 @@ def _find_header_row(rows: list, default: int = 1) -> int:
     return default
 
 
-# 有效的设备键
-_VALID_DEVICE_KEYS = {
-    "国内", "海外", "全球",
-    "阅读器", "平板",
-    "6", "7.8", "10.3", "13.3",
-    "黑白", "彩色",
+from boox_automation.devices.registry import device_list
+
+_EXPECTED_ACTION_MAP = {
+    "断言存在": "visible",
+    "断言不存在": "not_visible",
+    "断言toast": "toast",
+    "断言toast不出现": "toast_not",
 }
+
+_VALID_EXPECTED_ACTIONS = set(_EXPECTED_ACTION_MAP.keys())
+
+# 从设备 YAML 模型动态推导有效设备键（region/type/size/colour 的枚举值）
+_VALID_DEVICE_KEYS: set[str] = set()
+for _attrs in device_list.values():
+    for _field in ("region", "type", "size", "colour"):
+        _val = str(_attrs.get(_field, "")).strip()
+        if _val and _val.lower() != "none":
+            _VALID_DEVICE_KEYS.add(_val)
 
 
 def _is_device_key(text: str) -> bool:
@@ -142,10 +144,11 @@ def _device_key_matches(key: str, device_info: dict) -> bool:
     device_type = device_info.get("devices_reader", "")
     device_size = device_info.get("device_size", "")
     device_region = device_info.get("device_region", "")
+    device_colour = device_info.get("driver_colour", "")
     version = device_info.get("version_info", "").split("-")[0]
 
     for p in parts:
-        if p in (device_type, device_size, device_region, version):
+        if p in (device_type, device_size, device_region, device_colour, version):
             continue
         return False
     return True
@@ -539,17 +542,25 @@ class ElementLoader:
         self._ensure_expected_loaded()
 
     def _ensure_expected_loaded(self):
-        """确保至少加载到一个预期结果工作表，否则中断测试。"""
+        """确保至少加载到一个预期结果条目，否则中断测试。"""
         if self._expected_results:
             return
         modules = self._expected_modules or ["(未知)"]
         searched = '、'.join(f"预期结果【{m}】" for m in modules)
+
+        if self._expected_sheets_found:
+            found_str = '、'.join(self._expected_sheets_found)
+            raise RuntimeError(
+                f"预期结果工作表已找到（{found_str}），但所有条目均校验失败，测试中断。\n"
+                f"请检查 E 列（操作）是否已填写，有效值: {sorted(_VALID_EXPECTED_ACTIONS)}\n"
+                f"表头: 模块 | 匹配文本 | 定位元素 | xml页面 | 操作 | 用途说明"
+            )
         raise RuntimeError(
             f"未加载到任何预期结果工作表，测试中断。\n"
             f"已搜索: {searched}\n"
             f"请确认飞书元素表（或本地 elements.xlsx）中已创建对应的预期结果工作表。\n"
             f"格式: 工作表名 = 预期结果【模块名】（如 预期结果【阅读】），"
-            f"表头: 模块 | 匹配文本 | 定位元素 | xml页面 | 用途说明"
+            f"表头: 模块 | 匹配文本 | 定位元素 | xml页面 | 操作 | 用途说明"
         )
 
     def _load_expected_from_cloud(self):
@@ -606,6 +617,12 @@ class ElementLoader:
                 f"飞书预期结果加载完成: 共 {loaded} 个定义"
                 f"（找到工作表: {found_str}"
                 f"；缺失工作表: {missing_str}）"
+            )
+        elif self._expected_sheets_found:
+            found_str = '、'.join(self._expected_sheets_found)
+            logger.warning(
+                f"预期结果工作表已找到（{found_str}），但所有条目均校验失败。"
+                f"请检查 E 列（操作）是否已填写，有效值: {_VALID_EXPECTED_ACTIONS}"
             )
         else:
             missing_str = '、'.join(self._expected_sheets_missing)
@@ -702,6 +719,12 @@ class ElementLoader:
                 f"已从本地 Excel 加载 {loaded} 个预期结果定义 "
                 f"（工作表: {found_str}）"
             )
+        elif self._expected_sheets_found:
+            found_str = '、'.join(self._expected_sheets_found)
+            logger.warning(
+                f"本地预期结果工作表已找到（{found_str}），但所有条目均校验失败。"
+                f"请检查 E 列（操作）是否已填写，有效值: {sorted(_VALID_EXPECTED_ACTIONS)}"
+            )
         else:
             missing_str = '、'.join(self._expected_sheets_missing)
             logger.warning(
@@ -710,12 +733,10 @@ class ElementLoader:
             )
 
     def _parse_expected_rows(self, rows: list[list[str]]):
-        """解析预期结果 sheet 行数据（5 列）。
+        """解析预期结果 sheet 行数据（6 列）。
 
-        新旧两种表头兼容：
-          旧: 元素标识 | 匹配文本 | 页面XML | 检查元素 | 用途说明
-          新: 模块 | 匹配文本 | 定位元素 | xml页面 | 用途说明
-          key = 模块 + "." + 匹配文本（新格式）/ 元素标识（旧格式）
+        列结构: 模块 | 匹配文本 | 定位元素 | xml页面 | 操作 | 用途说明
+        key = 模块 + "." + 匹配文本
         """
         if len(rows) < 2:
             return
@@ -724,12 +745,13 @@ class ElementLoader:
         headers = [str(c).strip() for c in rows[h_idx]]
         _EXPECTED_HEADER_MAP = {
             "元素标识": "key",
-            "模块": "key",          # 新格式：模块列
+            "模块": "key",
             "匹配文本": "match",
             "页面XML": "content",
-            "xml页面": "content",   # 新格式
+            "xml页面": "content",
             "检查元素": "element_checks",
-            "定位元素": "element_checks",  # 新格式
+            "定位元素": "element_checks",
+            "操作": "action",
             "用途说明": "description",
         }
 
@@ -738,7 +760,7 @@ class ElementLoader:
                 continue
 
             key = ""
-            key_part = ""  # 模块列值（新格式用）
+            key_part = ""
             info: dict = {}
             for i, h in enumerate(headers):
                 val = str(row[i]).strip() if i < len(row) and row[i] else ""
@@ -754,6 +776,8 @@ class ElementLoader:
                     info["content"] = val
                 elif field == "element_checks":
                     info["element_checks"] = val
+                elif field == "action":
+                    info["action"] = val
                 elif field == "description":
                     info["description"] = val
 
@@ -768,9 +792,27 @@ class ElementLoader:
                 logger.warning(f"预期结果第{row_idx_0 + h_idx + 2}行缺少 key（模块+匹配文本 或 元素标识），跳过")
                 continue
 
-            if not info.get("content") and not info.get("element_checks"):
-                logger.warning(f"预期结果【{key}】页面XML和检查元素均为空，跳过")
+            # E 列（操作）校验：不允许为空或无效
+            action = info.get("action", "")
+            if not action:
+                logger.warning(f"预期结果【{key}】E列（操作）为空，跳过")
                 continue
+            if action not in _VALID_EXPECTED_ACTIONS:
+                logger.warning(
+                    f"预期结果【{key}】E列（操作）无效值'{action}'，"
+                    f"有效值: {_VALID_EXPECTED_ACTIONS}，跳过")
+                continue
+
+            # toast 模式：不需要 C/D 列，match 用于 toast 文本
+            if action in ("断言toast", "断言toast不出现"):
+                if not match:
+                    logger.warning(f"预期结果【{key}】E列为'{action}'但B列（匹配文本）为空，跳过")
+                    continue
+            else:
+                # visible / not_visible 模式：C/D 列至少有一个
+                if not info.get("content") and not info.get("element_checks"):
+                    logger.warning(f"预期结果【{key}】页面XML和检查元素均为空，跳过")
+                    continue
 
             self._expected_results[key] = info
 
@@ -1131,25 +1173,18 @@ class ElementMatcher:
         return self._get_elements().get(element_key)
 
     def suggest_action(self, element_key: str) -> str:
-        """根据元素信息推断推荐动作类型。
-
-        优先级: 显式 action 字段 > 关键词推断 > 默认 click
-        """
+        """返回元素表 D 列定义的操作类型，未定义或无效时默认 click。"""
         info = self._get_elements().get(element_key)
         if not info:
             return ""
         if not info.get("locator"):
-            return ""  # 无可操作的定位器，不能执行 UI 操作
+            return ""
 
         explicit = info.get("action", "")
         valid_actions = ("click", "assert_toast", "input", "long_press",
                          "click_coord", "long_press_coord", "swipe_coord")
         if explicit in valid_actions:
             return explicit
-
-        keywords = " ".join([element_key, info.get("operation", "")])
-        if any(w in keywords for w in ("toast", "Toast", "提示")):
-            return "assert_toast"
 
         return "click"
 

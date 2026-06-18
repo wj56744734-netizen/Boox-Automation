@@ -20,7 +20,7 @@ from boox_automation.engine.parser import (
     parse_steps, parse_preconditions, parse_expected_results,
     ParsedCase, ExpectedPageRef, check_conditions, validate_case,
 )
-from boox_automation.engine.elements import ElementMatcher, _DEVICE_ACTIONS
+from boox_automation.engine.elements import ElementMatcher
 
 
 logger = logging.getLogger(__name__)
@@ -102,27 +102,12 @@ def _resolve_case_elements(cases: list[ParsedCase]) -> list[ParsedCase]:
 
         for ep in case.expected_pages:
             if ep.tag:
-                raw_line = ep.raw
-                if 'toast提示' in raw_line:
-                    ep.check_mode = 'toast'
-                    ep.expected_text = ep.tag
-                elif 'toast不出现' in raw_line:
-                    ep.check_mode = 'toast_not'
-                    ep.expected_text = ep.tag
-                elif '不可见' in raw_line or '不存在' in raw_line:
-                    ep.check_mode = 'not_visible'
-                else:
-                    ep.check_mode = 'visible'
-
-                if ep.check_mode in ('visible', 'not_visible'):
-                    ep.expected_key = _loader.match_expected_result(ep.tag)
-                else:
-                    ep.expected_key = '__toast__'
+                ep.expected_key = _loader.match_expected_result(ep.tag)
 
         # 收集阶段诊断：预期结果匹配失败的 tag 提前暴露
         unresolved = [
             ep for ep in case.expected_pages
-            if ep.check_mode in ('visible', 'not_visible') and not ep.expected_key
+            if ep.tag and not ep.expected_key
         ]
         if unresolved:
             diag = _loader.get_expected_diagnostics()
@@ -371,12 +356,12 @@ class TestExcelRunner:
         if not case.expected_pages:
             logger.warning(f"R{case.row_number} [{case.title}] 无预期结果，缺少断言")
 
-        # 过滤无 element_key 的步骤（设备级 action / skip 除外）
+        # 过滤无 element_key 的步骤（skip 除外）
         for s in case.steps:
-            if not s.element_key and s.action not in _DEVICE_ACTIONS and s.action != "skip":
+            if not s.element_key and s.action != "skip":
                 s.status = "skip"
         steps = [s for s in case.steps
-                 if s.element_key or s.action in _DEVICE_ACTIONS or s.action == "skip"]
+                 if s.element_key or s.action == "skip"]
 
         # 构建 tag → 预期结果索引（支持同名 tag 多次出现时按序匹配）
         expected_by_tag: dict[str, list[ExpectedPageRef]] = {}
@@ -528,8 +513,8 @@ def _check_expected_by_tag(method, expected_by_tag: dict, consumed: dict, step, 
                 f"  ────────────────────────────────────────────────\n"
                 f"  解决方式:\n"
                 f"    1. 在飞书元素表中新建「预期结果【{module_hint}】」工作表\n"
-                f"       表头: 模块 | 匹配文本 | 定位元素 | xml页面 | 用途说明\n"
-                f"       数据行: {module_hint} | {tag} | (XPath或留空) | (XML或留空) | (说明)\n"
+                f"       表头: 模块 | 匹配文本 | 定位元素 | xml页面 | 操作 | 用途说明\n"
+                f"       数据行: {module_hint} | {tag} | (XPath或留空) | (XML或留空) | 断言存在 | (说明)\n"
                 f"    2. 或将预期页面 XML 放入本地文件:\n"
                 f"       data/expected_pages/{module_hint}.{tag}.xml\n"
                 f"──────────────────────────────────────────────────"
@@ -551,6 +536,7 @@ def _check_expected_by_tag(method, expected_by_tag: dict, consumed: dict, step, 
                 f"    B 列（匹配文本）: {tag}\n"
                 f"    C 列（定位元素）: 填入对应 XPath\n"
                 f"    D 列（xml页面）: 填入 Appium Inspector 导出的页面 XML\n"
+                f"    E 列（操作）: 断言存在 / 断言不存在 / 断言toast / 断言toast不出现\n"
                 f"    注意: B 列文字必须与 I 列【{tag}】完全一致\n"
                 f"──────────────────────────────────────────────────"
             )
@@ -613,30 +599,49 @@ def _wait_for_xml_elements(expected_xml: str, expected_key: str, step_seq: int) 
 def _dispatch_expected_page(method, ep) -> None:
     """执行单条预期结果校验。
 
+    断言类型由预期结果 Sheet E 列（操作）唯一决定。
     优先级: toast → D列XPath检查 → C列XML对比 → 本地文件回退
     """
     from boox_automation.engine.elements import (
         get_element_loader, _resolve_device_content,
         _load_expected_from_file, _check_elements_by_xpath,
+        _EXPECTED_ACTION_MAP,
     )
     from boox_automation.engine.xml_checker import XmlChecker
     from boox_automation.driver import driver
-
-    # toast 模式: 不走 XML 对比，直接轮询 page_source
-    if ep.check_mode == 'toast':
-        method.wait_check_toast(toast_true=ep.expected_text, toast_timeout=5)
-        ep.status = 'pass'
-        return
-    elif ep.check_mode == 'toast_not':
-        method.wait_check_toast(toast_false=ep.expected_text, toast_timeout=5)
-        ep.status = 'pass'
-        return
 
     loader = get_element_loader()
     page_info = loader.get_expected_page(ep.expected_key)
     if not page_info:
         logger.warning(f"步骤{ep.step_seq}：预期结果【{ep.tag}】（key={ep.expected_key}）在预期结果工作表中未找到")
         ep.status = "skip"
+        return
+
+    action = page_info.get("action", "")
+    check_mode = _EXPECTED_ACTION_MAP.get(action, "")
+    if not check_mode:
+        logger.error(f"步骤{ep.step_seq}：预期结果【{ep.tag}】（key={ep.expected_key}）E列操作无效或缺失: '{action}'")
+        ep.status = "fail"
+        raise AssertionError(f"预期结果 E 列操作无效: '{action}'")
+
+    # toast 模式: 不走 XML 对比，直接轮询 page_source。toast 文本来自 B 列（匹配文本）
+    if check_mode == 'toast':
+        toast_text = page_info.get("match", ep.tag)
+        method.wait_check_toast(toast_true=toast_text, toast_timeout=5)
+        ep.status = 'pass'
+        return
+    elif check_mode == 'toast_not':
+        toast_text = page_info.get("match", ep.tag)
+        import time
+        from boox_automation.core.config import get_int
+        timeout = get_int("toast.timeout", 5)
+        start = time.time()
+        while time.time() - start < timeout:
+            if toast_text in method.driver.page_source:
+                raise AssertionError(
+                    f"步骤{ep.step_seq}：预期结果【{ep.tag}】Toast不应出现'{toast_text}'但已检测到")
+            time.sleep(1)
+        ep.status = 'pass'
         return
 
     device_info = _get_device_info_safe()
@@ -647,7 +652,7 @@ def _dispatch_expected_page(method, ep) -> None:
         checks_content = _resolve_device_content(element_checks, device_info, key=ep.expected_key)
         if checks_content:
             try:
-                _check_elements_by_xpath(checks_content, mode=ep.check_mode,
+                _check_elements_by_xpath(checks_content, mode=check_mode,
                                          expected_key=ep.expected_key, step_seq=ep.step_seq)
                 ep.status = "pass"
                 return
@@ -686,7 +691,7 @@ def _dispatch_expected_page(method, ep) -> None:
         return
 
     try:
-        result = XmlChecker.check(content, actual_xml, mode=ep.check_mode)
+        result = XmlChecker.check(content, actual_xml, mode=check_mode)
     except Exception as e:
         logger.error(
             f"步骤{ep.step_seq}：预期结果【{ep.tag}】（key={ep.expected_key}）XML 解析失败: {e}\n"

@@ -353,7 +353,9 @@ class Base_note_class:
 
         for attempt in range(max_retries):
             if self._poll_element_gone(loc_type, loc_value, timeout):
+                logging.debug(f"[wait_popup_gone] 弹窗「{element_key}」已消失 (尝试 {attempt + 1})")
                 return True
+        logging.debug(f"[wait_popup_gone] 弹窗「{element_key}」{max_retries}次重试后仍未消失")
         return False
 
     def _poll_element_gone(self, loc_type, loc_value, timeout: int) -> bool:
@@ -798,6 +800,7 @@ class Operation_method(Base_note_class):
                             f"  ↳ 实际: {actual!r}"
                         )
 
+        logging.debug(f"[check_multi_elements] 多元素检查通过 ({len(checks)}个)")
         return True
 
     def _log_check_multi_error(self, element_key, idx, by_method, locator,
@@ -972,6 +975,7 @@ class Operation_method(Base_note_class):
                         logging.error(f"未找到 {child_loc} 子元素")
                         return False
                     child_element[0].click()
+                    logging.debug(f"[by_father_index_click] 父级下标[{parent_index}]子元素点击成功")
                     return True
                 return child_element[0].text
             return False
@@ -1030,6 +1034,7 @@ class Operation_method(Base_note_class):
                         logging.error(f"未找到 {child_loc} 子元素")
                         return False
                     child_element[sub_index].click()
+                    logging.debug(f"[by_father_sub_index_click] 父级下标[{parent_index}]子元素[{sub_index}]点击成功")
                     return True
                 return child_element[sub_index].text
             return False
@@ -1099,6 +1104,7 @@ class Operation_method(Base_note_class):
                     logging.debug(f"匹配到文本 '{target}' 的元素")
                     if should_click:
                         element.click()
+                        logging.debug(f"[by_name_click] 列表点击成功: '{target}'")
                     return element
             logging.error(f"在 {locator_value} 列表中未匹配到文本：{target}")
             return False
@@ -1137,10 +1143,12 @@ class Operation_method(Base_note_class):
                 element = elements[target_index]
                 if should_click:
                     element.click()
+                    logging.debug(f"[by_index_name_click] 下标[{target_index}]点击成功")
                 if element.text != target_name:
                     logging.debug(f"校验元素文本：预期 {target_name}，实际 {element.text}")
                     logging.error(f"未找到 '{target_name}' 元素")
                     return False
+                logging.debug(f"[by_index_name_click] 下标[{target_index}]校验通过: '{target_name}'")
                 return True
             else:
                 logging.error(f"下标({target_index})越界，无法获取元素")
@@ -1177,6 +1185,7 @@ class Operation_method(Base_note_class):
                 if should_click:
                     if element.is_enabled():
                         element.click()
+                        logging.debug(f"[by_index_click] 下标[{target_index}]点击成功")
                     else:
                         logging.error(f"元素不能点击")
                         return False
@@ -1218,11 +1227,14 @@ class Operation_method(Base_note_class):
             while time.time() - start_time < toast_timeout:
                 page_source = self.driver.page_source
                 if expected_toast_message in page_source:
+                    logging.debug(f"[wait_check_toast] 检测到预期Toast: '{expected_toast_message}'")
                     return True
                 elif abnormal_toast_message is not None:
                     if abnormal_toast_message in page_source:
+                        logging.debug(f"[wait_check_toast] 检测到异常Toast: '{abnormal_toast_message}'")
                         return False
                 time.sleep(1)
+            logging.debug(f"[wait_check_toast] 超时({toast_timeout}s)未检测到Toast: '{expected_toast_message}'")
             return False
 
     # ---- 输入框 ----
@@ -1299,6 +1311,7 @@ class Operation_method(Base_note_class):
                 except Exception:
                     pass
             self._settle_ui(0.2)
+            logging.debug(f"[wait_input_box] 输入成功: '{input_text}'")
             return True
 
     # ---- 长按 ----
@@ -1336,6 +1349,7 @@ class Operation_method(Base_note_class):
                 if actual == target:
                     logging.debug(f"匹配到文本 '{target}' 的元素，执行长按")
                     self._safe_long_press_by_element(element, duration=2)
+                    logging.debug(f"[wait_for_press_name] 长按成功: '{target}'")
                     return True
             logging.error(f"未找到指定 '{target_name}' 元素")
             return False
@@ -1425,6 +1439,7 @@ class Operation_method(Base_note_class):
                             logging.debug(f"匹配到弹窗内文本 '{target_name}' 的元素，执行点击")
                             self.xpath_check_timeout(target_name)
                             element.click()
+                            logging.debug(f"[pop_up_check_name_] 弹窗点击成功: '{target_name}'")
                             return True
                 return False
             except TimeoutException:
@@ -1487,6 +1502,7 @@ class Operation_method(Base_note_class):
         with allure.step(f"点击坐标 ({x_ratio:.2f},{y_ratio:.2f})"):
             self.driver.tap([(x, y)])
             self._settle_ui()
+            logging.debug(f"[click_by_coord] 坐标点击成功: ({x_ratio:.2f},{y_ratio:.2f}) → 像素({x}, {y})")
 
     def long_press_by_coord(self, element_key: str, duration: int = 2000):
         """按元素 locator 中的比例坐标长按。locator 格式: x,y（如 0.5,0.3）。"""
@@ -1506,6 +1522,7 @@ class Operation_method(Base_note_class):
         with allure.step(f"长按坐标 ({x_ratio:.2f},{y_ratio:.2f}) {duration}ms"):
             self.driver.tap([(x, y)], duration)
             self._settle_ui()
+            logging.debug(f"[long_press_by_coord] 坐标长按成功: ({x_ratio:.2f},{y_ratio:.2f}) → 像素({x}, {y}) {duration}ms")
 
     def swipe_by_coord(self, element_key: str, duration: int = 300):
         """按元素 locator 中的比例坐标滑动。locator 格式: x1,y1,x2,y2（起点→终点）。"""
@@ -1527,6 +1544,8 @@ class Operation_method(Base_note_class):
         with allure.step(f"滑动 ({x1:.2f},{y1:.2f})→({x2:.2f},{y2:.2f})"):
             self.driver.swipe(start_x, start_y, end_x, end_y, duration=duration)
             self._settle_ui()
+            logging.debug(f"[swipe_by_coord] 坐标滑动成功: ({x1:.2f},{y1:.2f})→({x2:.2f},{y2:.2f}) "
+                          f"像素({start_x},{start_y})→({end_x},{end_y}) {duration}ms")
 
     # ---- 系统键 ----
 
@@ -1535,6 +1554,7 @@ class Operation_method(Base_note_class):
         with allure.step("按返回键"):
             self.driver.press_keycode(4)
             self._settle_ui()
+            logging.debug("[press_back] 返回键已按下")
 
     # ---- 等待弹窗消失 ----
 
@@ -1593,6 +1613,7 @@ class Operation_method(Base_note_class):
         with allure.step(step_msg):
             action = TouchAction(self.driver)
             action.press(x=actual_x, y=actual_y).release().perform()
+            logging.debug(f"[wait_for_screen_size] 坐标点击成功: ({actual_x}, {actual_y})")
             return True
 
     # ---- 带耗时日志的导入等待 ----

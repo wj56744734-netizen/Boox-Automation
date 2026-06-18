@@ -98,7 +98,7 @@ class Public_method:
             return False
 
         try:
-            self.method.by_element_click(element_key="手写笔记.工具条-首次引导确认")
+            self.method.xpath_text_click(name='知道了')
             return True
         except Exception as e:
             logging.debug(f"工具条引导确认按钮未找到，跳过: {e}")
@@ -128,7 +128,7 @@ class Public_method:
             block=False
         )
         time.sleep(1)
-        self.method.xpath_text_click(element_key=click_key)
+        self.method.xpath_text_click(name=f'{click_key}')
         logs = self.logcat.wait_result(timeout=single_timeout + 5)
 
         detailed_matches = logs.get("detailed_matches", {}) if logs else {}
@@ -193,7 +193,8 @@ class Public_method:
             file_name2 = "无后缀"
 
         convert_time, create_time, open_time = self._import_is_time_consuming(
-            click_key="笔记首页.导入确认按钮",
+            click_key="确认",
+
             document_format=file_name2,
             toolbar=toolbar,
             template_text=file_name1
@@ -209,16 +210,17 @@ class Public_method:
 
     def import_bake(self):
         """导入后重置页面，回到文件选择页。"""
-        self.method.by_element_click(element_key="通用操作.笔记内-返回按钮")
+        self.method.xpath_parent_click(xpath='//android.widget.ImageView[@resource-id="com.onyx.android.note:id/back_icon"]')
         time.sleep(1)
-        self.method.by_element_click(element_key="通用操作.创建按钮")
-        self.method.xpath_text_click(element_key="笔记首页.从本地文件导入")
+        self.method.xpath_parent_click(xpath='//android.widget.TextView[@text="创建"]')
+        self.method.xpath_parent_click(xpath='//android.widget.TextView[@resource-id="com.onyx:id/title" and @text="从本地文件"]')
 
     def import_file(self, file_route_name, file_route_name2):
 
         def circular_swipe(swipe):
             while True:
-                page = self.method.obtain_element_text(element_key="设备相关.导入页码信息")
+                page = self.method.obtain_element_text(by_method='xpath',
+                                                       locator='//android.widget.TextView[@resource-id="com.onyx.android.note:id/page_info"]')
                 page = page.split("/")
                 current_page = int(page[0])
                 total_pages = int(page[1])
@@ -239,7 +241,8 @@ class Public_method:
         circular_swipe(1)
 
         try:
-            page_info = self.method.obtain_element_text(element_key="设备相关.导入页码信息")
+            page_info = self.method.obtain_element_text(by_method='xpath',
+                                                       locator='//android.widget.TextView[@resource-id="com.onyx.android.note:id/page_info"]')
             total_pages = int(page_info.split("/")[1])
             logging.debug(f"检测到文件夹总页数：{total_pages}")
         except (IndexError, ValueError) as e:

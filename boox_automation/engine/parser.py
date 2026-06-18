@@ -4,54 +4,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-# 动作词 → 操作类型映射（精确关键词在前，泛关键词在后）
-_ACTION_MAP = {
-    # ── 点击类 → click ──
-    "点击": "click",
-    "打开": "click",
-    "进入": "click",
-    "选择": "click",
-    "双击": "click",
-    "退出": "click",
-    "返回": "click",
-    "清空": "click",
-    "确认": "click",
-    "关闭": "click",
-
-    # ── 输入 ──
-    "输入": "input",
-
-    # ── 长按 ──
-    "长按": "long_press",
-
-    # ── 方向滑动（设备级硬编码，不用【】）──
-    "向上滑动": "swipe_up",
-    "上滑": "swipe_up",
-    "向下滑动": "swipe_down",
-    "下滑": "swipe_down",
-    "向左滑动": "swipe_left",
-    "左滑": "swipe_left",
-    "向右滑动": "swipe_right",
-    "右滑": "swipe_right",
-
-    # ── 滑动（需【】匹配飞书元素，locator=x1,y1,x2,y2）──
-    "滑动": "swipe_coord",
-
-    # ── 坐标操作（需【】匹配飞书元素，locator=x,y）──
-    "点击坐标": "click_coord",
-    "长按坐标": "long_press_coord",
-
-    # ── 系统键（设备级硬编码，不用【】）──
-    "按返回键": "press_back",
-    "返回键": "press_back",
-}
-
-# 设备级操作：不需要【】元素匹配，纯关键词驱动
-_DEVICE_ACTIONS = {
-    "swipe_up", "swipe_down", "swipe_left", "swipe_right",
-    "press_back",
-}
-
 _TAG_RE = re.compile(r"【(.+?)】")
 _STEP_RE = re.compile(r"(\d+)[\.\、](.*)")
 _VERSION_COND_RE = re.compile(r"^\d+\.\d+\.\d+-版本执行$")
@@ -71,7 +23,7 @@ _CONDITION_KEYWORDS: dict[str, tuple[str, str]] = {
 class ParsedStep:
     seq: int
     raw: str
-    action: str  # click / input / long_press / swipe_up / swipe_down / swipe_left / swipe_right / press_back / skip / assert_toast
+    action: str  # 解析阶段: click / skip；运行时由元素表 D 列覆盖
     tag: str = ""  # 第一个【】= 元素标记
     element_key: str = ""  # 由 matcher 填入
     status: str = ""  # pass / fail / skip
@@ -103,12 +55,13 @@ class ParsedCase:
 
 @dataclass
 class ExpectedPageRef:
-    """预期结果 — 关联到预期结果 sheet 中的页面 XML。"""
+    """预期结果 — 关联到预期结果 sheet 中的页面 XML。
+
+    断言类型（可见/不可见/toast/无toast）由预期结果 Sheet E 列（操作）唯一决定。
+    """
     step_seq: int           # 步骤号
-    tag: str                # 【】内的原始文本（含后缀如 toast提示 / 不可见）
-    expected_key: str = ""  # 预期结果 sheet 中的 key（visible/not_visible 用）
-    check_mode: str = "visible"  # visible / not_visible / toast / toast_not
-    expected_text: str = "" # toast 模式下的期望文本
+    tag: str                # 【】内的文本
+    expected_key: str = ""  # 预期结果 sheet 中的 key
     raw: str = ""           # 原始行
     status: str = ""        # pass / fail / skip
 
@@ -213,16 +166,13 @@ def has_cleanup(preconditions: list, kind: str) -> bool:
 
 
 def _detect_action(text: str, tag: str) -> str:
-    """根据文本中的关键词判断操作类型。"""
-    # 检查行：以 检查/查看/校验 开头 → 程序 skip，保留给人看
+    """根据文本中的关键词判断操作类型。
+
+    操作类型由元素表 D 列（操作）唯一决定，解析阶段只区分 skip/click。
+    """
     for prefix in ("检查", "查看", "校验"):
         if text.startswith(prefix):
             return "skip"
-
-    # 按关键词长度降序，确保"点击坐标"优先于"点击"匹配
-    for keyword, action in sorted(_ACTION_MAP.items(), key=lambda x: -len(x[0])):
-        if keyword in text:
-            return action
     if tag:
         return "click"
     return "skip"
@@ -345,11 +295,10 @@ def validate_case(case: ParsedCase) -> str | None:
     if dupes:
         return f"步骤号重复: {sorted(dupes)}，请检查操作步骤列的编号"
 
-    # 2. 元素缺失检查（skip/设备级动作无需 element_key）
+    # 2. 元素缺失检查（skip 无需 element_key）
     missing = [(s.seq, s.tag) for s in case.steps
                if s.tag and not s.element_key
-               and s.action != "skip"
-               and s.action not in _DEVICE_ACTIONS]
+               and s.action != "skip"]
     if missing:
         items = "、".join(f"步骤{n}【{t}】" for n, t in missing)
         return f"元素未匹配: {items}"

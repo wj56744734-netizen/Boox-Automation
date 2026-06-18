@@ -27,7 +27,7 @@ class Test_import_the_file:
         self.public.enter_note_app()
 
         #点击"创建笔记"按钮
-        self.method.xpath_text_click(element_key="笔记首页.无笔记状态创建按钮")
+        self.method.xpath_parent_click(xpath='//android.widget.TextView[@resource-id="com.onyx:id/on_new_note"]')
 
         #创建笔记二级菜单点击 从本地文件
         self.method.by_name_click(By.ID, "com.onyx:id/title", "从本地文件")

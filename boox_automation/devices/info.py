@@ -13,7 +13,9 @@ _Version_Information = None
 TEST_FILES_DISPLAY_ROOT = "笔记自动化测试文件"
 TEST_FILES_DIR_NOTE_EXPORT = "固件迭代测试项（笔记导出）"
 TEST_FILES_DIR_NOTE_RENDER = "固件迭代测试项（笔记渲染）"
-TEST_FILES_DIR_LOCAL_FILE  = "用例测试，从本地文件导入"
+# TEST_FILES_DIR_LOCAL_FILE  = "用例测试，从本地文件导入"
+TEST_FILES_DIR_LOCAL_FILE  = "测试书籍"
+
 
 class Device_basic_information:
 
