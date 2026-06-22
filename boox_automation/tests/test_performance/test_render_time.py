@@ -1,3 +1,11 @@
+import sys
+import os
+
+# 确保项目根目录在 sys.path 中（兼容直接 python 运行及 VS Code 等不以项目根为 cwd 的方式）
+_project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
+
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.wait import WebDriverWait
@@ -384,3 +392,8 @@ class Test_Render_Time:
         for note_name in note_names:
             self.note_thumbnail_rendering_time(open_note_logcat, note_thumbnail_logcat, note_name)
             logging.info(f"==================================================")
+
+
+if __name__ == "__main__":
+    import pytest
+    sys.exit(pytest.main([__file__, "-s"] + sys.argv[1:]))

@@ -147,16 +147,67 @@ def feishu_token_cache_ttl() -> int:
     return get_int("feishu.token_cache_ttl", 5400)
 
 
+def excel_source() -> str:
+    """用例和元素的加载方式: cloud | cache | local。
+    USE_LOCAL_EXCEL=1 强制 local，NOTE_EXCEL_SOURCE 环境变量次之。
+    """
+    if os.environ.get("USE_LOCAL_EXCEL", "") in ("1", "true", "yes"):
+        return "local"
+    env = os.environ.get("NOTE_EXCEL_SOURCE", "")
+    if env and env.strip().lower() in ("cloud", "cache", "local"):
+        return env.strip().lower()
+    val = get_str("excel.source", "cloud")
+    if val not in ("cloud", "cache", "local"):
+        raise ValueError(
+            f"config.yaml excel.source 无效值: '{val}'，"
+            f"有效值: cloud | cache | local"
+        )
+    return val
+
+
+def case_path() -> str:
+    """本地用例文件路径（仅 excel_source=local 时生效）。
+    支持相对路径（相对于项目根目录）或绝对路径。
+    环境变量 NOTE_TEST_CASE_PATH 可覆盖。
+    """
+    env = os.environ.get("NOTE_TEST_CASE_PATH", "")
+    if env:
+        return _resolve_local_path(env)
+    raw = get_str("excel.test_case_path", "data/test_cases.xlsx")
+    return _resolve_local_path(raw)
+
+
+def elements_path() -> str:
+    """本地元素文件路径（仅 excel_source=local 时生效）。
+    环境变量 NOTE_ELEMENTS_PATH 可覆盖。
+    """
+    env = os.environ.get("NOTE_ELEMENTS_PATH", "")
+    if env:
+        return _resolve_local_path(env)
+    raw = get_str("excel.elements_path", "data/elements.xlsx")
+    return _resolve_local_path(raw)
+
+
+def _resolve_local_path(raw: str) -> str:
+    """将相对路径转为基于项目根目录的绝对路径。"""
+    p = Path(raw)
+    if p.is_absolute():
+        return str(p)
+    return str(_resolve_config_path().parent / p)
+
+
 def excel_priority_filter() -> str:
     return get_str("excel.priority_filter", "P0")
 
 
 def excel_test_case_file() -> str:
-    return get_str("excel.test_case_file", "test_cases.xlsx")
+    """已弃用: 请使用 case_path()。保留以兼容旧代码。"""
+    return get_str("excel.test_case_path", "data/test_cases.xlsx")
 
 
 def excel_elements_file() -> str:
-    return get_str("excel.elements_file", "elements.xlsx")
+    """已弃用: 请使用 elements_path()。保留以兼容旧代码。"""
+    return get_str("excel.elements_path", "data/elements.xlsx")
 
 
 def test_modules() -> list[str]:
@@ -234,6 +285,18 @@ def adb_cleanup_storage_paths() -> list[str]:
     if isinstance(paths, list):
         return [str(p) for p in paths if p]
     return ["/sdcard/note/*"]
+
+
+def coord_max_tap_retries() -> int:
+    return get_int("coord.max_tap_retries", 3)
+
+
+def coord_tap_retry_delay() -> float:
+    return get_float("coord.tap_retry_delay", 0.5)
+
+
+def coord_verify_timeout() -> int:
+    return get_int("coord.verify_timeout", 5)
 
 
 def timeout_default() -> int:

@@ -4,6 +4,11 @@ import os
 import re
 import fnmatch
 
+# 确保项目根目录在 sys.path 中（兼容 VS Code 等不以项目根为 cwd 的运行方式）
+_project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
+
 # 关键：非 TTY 环境下强制 stdout 行缓冲，实现日志实时输出
 sys.stdout.reconfigure(line_buffering=True)
 
@@ -244,6 +249,11 @@ def _send_feishu_report(session) -> None:
     from boox_automation.core.feishu_report import build_report_card, push_report
     from boox_automation.devices.info import Device_basic_information
     from boox_automation.core.config import test_modules as cfg_test_modules
+    from boox_automation.engine.result_store import get_cases
+    from boox_automation.core.html_reporter import build_case_report, save_report
+    from boox_automation.core.feishu import upload_file_to_im, send_file_message
+    from boox_automation.core.config import feishu_chat_id, feishu_report_enabled
+    from pathlib import Path
 
     duration_sec = time.time() - _SESSION_START if _SESSION_START else 0
     failed_cases = _extract_case_titles(stats.get("failed", []), max_items=10)
@@ -266,8 +276,26 @@ def _send_feishu_report(session) -> None:
         device=device,
     )
 
-    allure_dir = getattr(session.config.option, "allure_report_dir", None)
-    push_report(card, allure_dir)
+    # ── 生成 HTML 报告 ──
+    cases = get_cases()
+    html_path = None
+    if cases:
+        try:
+            html = build_case_report(
+                cases=cases,
+                device_info=device,
+                session_start=_SESSION_START,
+                modules=modules,
+            )
+            from boox_automation.core.paths import ARTIFACTS_ROOT
+            report_dir = ARTIFACTS_ROOT / "reports"
+            html_path = save_report(html, report_dir)
+            logging.info(f"HTML 测试报告已生成: {html_path}")
+        except Exception as e:
+            logging.error(f"HTML 报告生成失败: {e}")
+
+    # ── 推送飞书：卡片 + HTML 文件 ──
+    push_report(card, html_path)
 
 
 def _extract_case_titles(reports, max_items: int = 10) -> list[str]:

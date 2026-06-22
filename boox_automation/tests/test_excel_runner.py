@@ -6,8 +6,16 @@
     pytest boox_automation/tests/test_excel_runner.py -s
 """
 from __future__ import annotations
+import sys
+import os
 import logging
 from pathlib import Path
+
+# 确保项目根目录在 sys.path 中（兼容直接 python 运行及 VS Code 等不以项目根为 cwd 的方式）
+_project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
+
 import allure
 import pytest
 import openpyxl
@@ -21,14 +29,14 @@ from boox_automation.engine.parser import (
     ParsedCase, ExpectedPageRef, check_conditions, validate_case,
 )
 from boox_automation.engine.elements import ElementMatcher
-
+from boox_automation.engine.result_store import set_cases
 
 logger = logging.getLogger(__name__)
 
 # ============================================================
-from boox_automation.core.config import excel_priority_filter, excel_test_case_file, test_modules as cfg_test_modules, case_column
+from boox_automation.core.config import excel_priority_filter, case_path, excel_source, test_modules as cfg_test_modules, case_column
 
-EXCEL_FILE = str(Path(__file__).resolve().parent.parent / "data" / excel_test_case_file())
+EXCEL_FILE = case_path()
 PRIORITY_FILTER = excel_priority_filter()
 _PRIORITY_ORDER = {"P0": 0, "P1": 1, "P2": 2, "TEST": 3}
 # ============================================================
@@ -150,49 +158,44 @@ def _apply_filters(cases: list[ParsedCase], priority_spec: str) -> list[ParsedCa
 
 
 def _load_cases(excel_path: str, sheets: list[str], priority_spec: str) -> list[ParsedCase]:
-    """加载用例（缓存优先，云端刷新，本地兜底）。"""
-    from boox_automation.core.feishu import (
-        use_local_excel, check_feishu_reachable,
-        load_cache, save_cache, get_cache_age,
-    )
+    """按配置的 excel_source 加载用例（单一路径，不回退）。"""
+    source = excel_source()
 
-    if use_local_excel():
-        logger.debug("用例加载路径: 本地 Excel（USE_LOCAL_EXCEL=1）")
+    if source == "local":
+        logger.info(f"用例加载: 本地 Excel — {excel_path}")
         sheet_data = _read_local_sheets(excel_path, sheets)
         return _parse_cases_from_sheets(sheet_data, sheets, priority_spec)
 
-    # 1. 尝试云端
-    if check_feishu_reachable():
-        logger.debug(f"用例加载路径: 飞书云端（目标工作表: {', '.join(sheets)}）")
+    if source == "cache":
+        logger.info("用例加载: 本地缓存")
+        cached = _load_cases_from_cache(sheets, priority_spec)
+        if cached is not None:
+            return cached
+        raise RuntimeError(
+            "用例加载失败: excel.source=cache，但无可用缓存。"
+            "请先以 cloud 模式运行一次生成缓存，或改为 local 模式。"
+        )
+
+    if source == "cloud":
+        from boox_automation.core.feishu import check_feishu_reachable, save_cache
+        logger.info(f"用例加载: 飞书云端（目标工作表: {', '.join(sheets)}）")
+        if not check_feishu_reachable():
+            raise RuntimeError(
+                "用例加载失败: excel.source=cloud，但飞书 API 不可达。"
+                "请检查网络连接或切换为 cache/local 模式。"
+            )
         try:
             sheet_data = _read_cloud_sheets(sheets)
             save_cache({"sheets": sheet_data}, "test_cases")
             logger.info("用例来源: 飞书云端（已更新本地缓存）")
             return _parse_cases_from_sheets(sheet_data, sheets, priority_spec)
-        except Exception:
-            logger.warning(
-                "飞书云端加载用例失败，回退缓存。如已修改飞书在线文档但未生效，"
-                "请删缓存后重试: rm boox_automation/data/.cache/test_cases.json",
-                exc_info=True,
-            )
+        except Exception as e:
+            raise RuntimeError(
+                f"用例加载失败: excel.source=cloud，飞书云端加载异常。"
+                f"错误: {e}"
+            ) from e
 
-    # 2. 云端不可用 → 缓存兜底
-    logger.debug("用例加载路径: 本地缓存")
-    cached = _load_cases_from_cache(sheets, priority_spec)
-    if cached is not None:
-        age = get_cache_age("test_cases")
-        logger.warning(
-            f"用例来源: 本地缓存（{age}）。"
-            f"如飞书在线文档已有更新，请删缓存后重试: "
-            f"rm boox_automation/data/.cache/test_cases.json"
-        )
-        return cached
-
-    # 3. 兜底本地 Excel
-    logger.debug("用例加载路径: 本地 Excel（兜底）")
-    logger.warning("无可用缓存，回退本地 Excel")
-    sheet_data = _read_local_sheets(excel_path, sheets)
-    return _parse_cases_from_sheets(sheet_data, sheets, priority_spec)
+    raise RuntimeError(f"未知的 excel.source: {source}")
 
 
 def _read_local_sheets(excel_path: str, sheets: list[str]) -> dict[str, list[list[str]]]:
@@ -276,15 +279,15 @@ def _make_case_id(case: ParsedCase) -> str:
 
 # ── 用例收集 ──
 from boox_automation.core.config import test_case_sheets as _test_case_sheets
-from boox_automation.core.feishu import use_local_excel
 _sheets = _test_case_sheets()
 logger.debug(
     f"用例收集配置: 目标工作表={_sheets}, "
     f"优先级筛选={PRIORITY_FILTER}, "
-    f"本地模式={'是' if use_local_excel() else '否'}"
+    f"数据源={excel_source()}"
 )
 logger.info("── 开始收集用例 ──")
 _all_cases = _load_cases(EXCEL_FILE, _sheets, PRIORITY_FILTER)
+set_cases(_all_cases)
 _executable = [c for c in _all_cases if any(s.element_key for s in c.steps)]
 _executable.sort(key=lambda c: (_PRIORITY_ORDER.get(c.priority, 99), c.row_number))
 _skipped = len(_all_cases) - len(_executable)
@@ -374,6 +377,7 @@ class TestExcelRunner:
                 for step in steps:
                     clear_element_ctx()
                     set_step_context(f"R{case.row_number} 步骤{step.seq}")
+                    logger.info(f"  {step.raw.strip()}")
                     _dispatch_step(self.method, self.public, step)
                     step.status = "pass"
                     clear_step_context()
@@ -394,6 +398,7 @@ class TestExcelRunner:
                         f"R{case.row_number} 预期结果中以下行未匹配到检查步骤:\n" +
                         "\n".join(f"  ↳ {u}" for u in unconsumed)
                     )
+            logger.info(f"⏐ PASSED  {case_id}")
         except Exception as e:
             for s in steps:
                 if not s.status:
@@ -676,4 +681,12 @@ def _dispatch_expected_page(method, ep) -> None:
     )
 
 
+if __name__ == "__main__":
+    import sys
+    # 确保项目根在 sys.path 中（VS Code 绿色三角形等直接 python 运行场景）
+    _proj_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    if _proj_root not in sys.path:
+        sys.path.insert(0, _proj_root)
+    import pytest
+    sys.exit(pytest.main([__file__, "-s"] + sys.argv[1:]))
 

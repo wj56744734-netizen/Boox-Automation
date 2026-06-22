@@ -1,0 +1,378 @@
+{
+  "results": {
+    "function_title_name": {
+      "cx": 81,
+      "cy": 230,
+      "ratio": "0.04,0.09",
+      "rid": "com.onyx:id/function_title_name"
+    },
+    "on_new_note": {
+      "cx": 1012,
+      "cy": 1334,
+      "ratio": "0.54,0.54",
+      "rid": "com.onyx:id/on_new_note"
+    },
+    "more_menu": {
+      "cx": 1758,
+      "cy": 167,
+      "ratio": "0.95,0.07",
+      "rid": "com.onyx:id/more_menu"
+    },
+    "sync_btn": {
+      "cx": 1452,
+      "cy": 167,
+      "ratio": "0.78,0.07",
+      "rid": "com.onyx:id/sync_btn"
+    },
+    "note_association_tab1": {
+      "cx": 471,
+      "cy": 167,
+      "ratio": "0.25,0.07",
+      "rid": "com.onyx:id/note_association_tab1"
+    },
+    "note_association_recent": {
+      "cx": 573,
+      "cy": 167,
+      "ratio": "0.31,0.07",
+      "rid": "com.onyx:id/note_association_recent"
+    },
+    "page_info": {
+      "cx": 1758,
+      "cy": 2402,
+      "ratio": "0.95,0.97",
+      "rid": "com.onyx:id/page_info"
+    },
+    "avatar": {
+      "cx": 724,
+      "cy": 2403,
+      "ratio": "0.39,0.97",
+      "rid": "com.onyx:id/avatar"
+    },
+    "style_iv": {
+      "cx": 1610,
+      "cy": 2403,
+      "ratio": "0.87,0.97",
+      "rid": "com.onyx:id/style_iv"
+    },
+    "login": {
+      "cx": 1012,
+      "cy": 1184,
+      "ratio": "0.54,0.48",
+      "rid": "com.onyx:id/login"
+    },
+    "tool_layout": {
+      "cx": 1549,
+      "cy": 167,
+      "ratio": "0.83,0.07",
+      "rid": "com.onyx:id/tool_layout"
+    },
+    "content_layout": {
+      "cx": 929,
+      "cy": 1240,
+      "ratio": "0.50,0.50",
+      "text": ""
+    },
+    "list": {
+      "cx": 929,
+      "cy": 1240,
+      "ratio": "0.50,0.50",
+      "text": ""
+    },
+    "icon": {
+      "cx": 682,
+      "cy": 849,
+      "ratio": "0.37,0.34",
+      "text": ""
+    },
+    "title": {
+      "cx": 816,
+      "cy": 849,
+      "ratio": "0.44,0.34",
+      "text": "手写笔记"
+    },
+    "action_bar_root": {
+      "cx": 930,
+      "cy": 1240,
+      "ratio": "0.50,0.50",
+      "text": "",
+      "rid": "com.onyx:id/action_bar_root"
+    },
+    "content": {
+      "cx": 930,
+      "cy": 1240,
+      "ratio": "0.50,0.50",
+      "text": "",
+      "rid": "android:id/content"
+    },
+    "top_divider_line": {
+      "cx": 930,
+      "cy": 63,
+      "ratio": "0.50,0.03",
+      "text": "",
+      "rid": "com.onyx:id/top_divider_line"
+    },
+    "activity_main": {
+      "cx": 930,
+      "cy": 1271,
+      "ratio": "0.50,0.51",
+      "text": "",
+      "rid": "com.onyx:id/activity_main"
+    },
+    "function_bar": {
+      "cx": 82,
+      "cy": 1271,
+      "ratio": "0.04,0.51",
+      "text": "",
+      "rid": "com.onyx:id/function_bar"
+    },
+    "function_bar_recycler": {
+      "cx": 81,
+      "cy": 1271,
+      "ratio": "0.04,0.51",
+      "text": "",
+      "rid": "com.onyx:id/function_bar_recycler"
+    },
+    "function_item": {
+      "cx": 81,
+      "cy": 184,
+      "ratio": "0.04,0.07",
+      "text": "",
+      "rid": "com.onyx:id/function_item"
+    },
+    "function_icon": {
+      "cx": 81,
+      "cy": 158,
+      "ratio": "0.04,0.06",
+      "text": "",
+      "rid": "com.onyx:id/function_icon"
+    },
+    "dot_icon": {
+      "cx": 112,
+      "cy": 368,
+      "ratio": "0.06,0.15",
+      "text": "",
+      "rid": "com.onyx:id/dot_icon"
+    },
+    "status_layout": {
+      "cx": 1012,
+      "cy": 1308,
+      "ratio": "0.54,0.53",
+      "text": "",
+      "rid": "com.onyx:id/status_layout"
+    },
+    "content_search_view": {
+      "cx": 1012,
+      "cy": 191,
+      "ratio": "0.54,0.08",
+      "text": "",
+      "rid": "com.onyx:id/content_search_view"
+    },
+    "imageview_search_back": {
+      "cx": 298,
+      "cy": 192,
+      "ratio": "0.16,0.08",
+      "text": "",
+      "rid": "com.onyx:id/imageview_search_back"
+    },
+    "ly_search_input_layout": {
+      "cx": 988,
+      "cy": 191,
+      "ratio": "0.53,0.08",
+      "text": "",
+      "rid": "com.onyx:id/ly_search_input_layout"
+    },
+    "search_et_input": {
+      "cx": 988,
+      "cy": 191,
+      "ratio": "0.53,0.08",
+      "text": "请输入关键字",
+      "rid": "com.onyx:id/search_et_input"
+    },
+    "search_button": {
+      "cx": 1720,
+      "cy": 191,
+      "ratio": "0.92,0.08",
+      "text": "",
+      "rid": "com.onyx:id/search_button"
+    },
+    "search_option": {
+      "cx": 1012,
+      "cy": 310,
+      "ratio": "0.54,0.12",
+      "text": "",
+      "rid": "com.onyx:id/search_option"
+    },
+    "title_checkbox": {
+      "cx": 311,
+      "cy": 310,
+      "ratio": "0.17,0.12",
+      "text": "标题",
+      "rid": "com.onyx:id/title_checkbox"
+    },
+    "scribble_checkbox": {
+      "cx": 496,
+      "cy": 310,
+      "ratio": "0.27,0.12",
+      "text": "手写",
+      "rid": "com.onyx:id/scribble_checkbox"
+    },
+    "text_checkbox": {
+      "cx": 681,
+      "cy": 310,
+      "ratio": "0.37,0.12",
+      "text": "文本",
+      "rid": "com.onyx:id/text_checkbox"
+    },
+    "tag_checkbox": {
+      "cx": 866,
+      "cy": 310,
+      "ratio": "0.47,0.12",
+      "text": "标签",
+      "rid": "com.onyx:id/tag_checkbox"
+    },
+    "all_library_checkbox": {
+      "cx": 1156,
+      "cy": 310,
+      "ratio": "0.62,0.12",
+      "text": "全部文件夹",
+      "rid": "com.onyx:id/all_library_checkbox"
+    },
+    "input_divider": {
+      "cx": 1012,
+      "cy": 369,
+      "ratio": "0.54,0.15",
+      "text": "",
+      "rid": "com.onyx:id/input_divider"
+    },
+    "list_status_layout": {
+      "cx": 1012,
+      "cy": 1349,
+      "ratio": "0.54,0.54",
+      "text": "",
+      "rid": "com.onyx:id/list_status_layout"
+    },
+    "verify_status_layout": {
+      "cx": 1012,
+      "cy": 1349,
+      "ratio": "0.54,0.54",
+      "text": "",
+      "rid": "com.onyx:id/verify_status_layout"
+    },
+    "page_layout": {
+      "cx": 1012,
+      "cy": 2403,
+      "ratio": "0.54,0.97",
+      "text": "",
+      "rid": "com.onyx:id/page_layout"
+    },
+    "total": {
+      "cx": 296,
+      "cy": 2403,
+      "ratio": "0.16,0.97",
+      "text": "总计：",
+      "rid": "com.onyx:id/total"
+    },
+    "bottom_divider_line": {
+      "cx": 930,
+      "cy": 2479,
+      "ratio": "0.50,1.00",
+      "text": "",
+      "rid": "com.onyx:id/bottom_divider_line"
+    },
+    "statusBarBackground": {
+      "cx": 930,
+      "cy": 31,
+      "ratio": "0.50,0.01",
+      "text": "",
+      "rid": "android:id/statusBarBackground"
+    },
+    "text_title": {
+      "cx": 311,
+      "cy": 167,
+      "ratio": "0.17,0.07",
+      "text": "回收站"
+    },
+    "no_search": {
+      "cx": 1012,
+      "cy": 1296,
+      "ratio": "0.54,0.52",
+      "text": "未找到相关内容"
+    },
+    "全部笔记：目录0/笔记0": {
+      "cx": 384,
+      "cy": 2418,
+      "ratio": "0.21,0.97",
+      "text": "全部笔记：目录0/笔记0"
+    }
+  },
+  "coord_map": {
+    "手写笔记": "0.44,0.34",
+    "请输入关键字": "0.53,0.08",
+    "标题": "0.17,0.12",
+    "手写": "0.27,0.12",
+    "文本": "0.37,0.12",
+    "标签": "0.47,0.12",
+    "全部文件夹": "0.62,0.12",
+    "总计：": "0.16,0.97",
+    "回收站": "0.86,0.32",
+    "未找到相关内容": "0.54,0.52",
+    "全部笔记：目录0/笔记0": "0.21,0.97",
+    "书库": "0.04,0.09",
+    "书城": "0.04,0.09",
+    "笔记": "0.04,0.09",
+    "存储": "0.04,0.09",
+    "应用": "0.04,0.09",
+    "设置": "0.04,0.09",
+    "创建笔记": "0.54,0.54",
+    "更多菜单": "0.95,0.07",
+    "同步按钮": "0.78,0.07",
+    "搜索框": "0.53,0.08",
+    "搜索按钮": "0.92,0.08",
+    "搜索返回": "0.16,0.08",
+    "总计": "0.16,0.97",
+    "退出手写笔记": "0.03,0.07",
+    "退出笔记": "0.03,0.07",
+    "退出会议笔记": "0.03,0.07",
+    "退出无边笔记": "0.03,0.07",
+    "退出文本笔记": "0.03,0.07",
+    "返回": "0.03,0.07",
+    "进入笔记首页": "0.04,0.29",
+    "创建": "0.54,0.54",
+    "创建按钮": "0.54,0.54",
+    "搜索": "0.89,0.07",
+    "更多": "0.95,0.07",
+    "会议": "0.04,0.19",
+    "新建文件夹": "0.87,0.12",
+    "批量管理": "0.87,0.17",
+    "筛选排序": "0.87,0.22",
+    "笔记设置": "0.87,0.27",
+    "创建菜单手写笔记": "0.45,0.13",
+    "创建菜单文本笔记": "0.45,0.32",
+    "创建菜单会议笔记": "0.45,0.23",
+    "创建菜单无边笔记": "0.45,0.23",
+    "创建菜单快捷创建": "0.45,0.38",
+    "从本地文件": "0.45,0.43",
+    "关闭工具条首次引导": "0.85,0.07",
+    "关闭文本笔记引导": "0.85,0.07",
+    "关闭会议笔记引导": "0.85,0.07",
+    "知道了": "0.50,0.80",
+    "大方格": "0.31,0.45",
+    "点阵": "0.47,0.45",
+    "空白": "0.07,0.45",
+    "单页布局": "0.15,0.55",
+    "连续布局": "0.50,0.55",
+    "全选": "0.15,0.07",
+    "还原": "0.31,0.07",
+    "删除": "0.31,0.07",
+    "清空": "0.47,0.07",
+    "取消": "0.86,0.12",
+    "确定": "0.86,0.12",
+    "登录": "0.54,0.48",
+    "笔记名称": "0.50,0.07",
+    "左滑翻页": "0.00,0.00,0.00,0.00"
+  },
+  "screen": [
+    1860,
+    2480
+  ]
+}

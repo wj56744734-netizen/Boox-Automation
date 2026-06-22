@@ -1,3 +1,11 @@
+import sys
+import os
+
+# 确保项目根目录在 sys.path 中（兼容直接 python 运行及 VS Code 等不以项目根为 cwd 的方式）
+_project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
+
 from boox_automation.devices.info import (
     TEST_FILES_DISPLAY_ROOT, TEST_FILES_DIR_LOCAL_FILE,
 )
@@ -45,3 +53,6 @@ class Test_import_the_file:
         logging.info(f"成功导入 {len(imported_files)} 个文件")
 
 
+if __name__ == "__main__":
+    import pytest
+    sys.exit(pytest.main([__file__, "-s"] + sys.argv[1:]))

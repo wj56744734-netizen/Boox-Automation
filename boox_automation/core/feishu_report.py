@@ -3,10 +3,6 @@
 from __future__ import annotations
 
 import logging
-import os
-import shutil
-import subprocess
-import tempfile
 from datetime import datetime
 from pathlib import Path
 
@@ -73,7 +69,7 @@ def build_report_card(
     elements.append({"tag": "hr"})
     elements.append({
         "tag": "note",
-        "elements": [{"tag": "plain_text", "content": "📎 完整 Allure 报告见下方文件"}],
+        "elements": [{"tag": "plain_text", "content": "📎 完整 HTML 测试报告见下方文件，下载后双击即可打开"}],
     })
 
     return {
@@ -158,9 +154,9 @@ def _failed_section(cases: list[str]) -> str:
 
 def push_report(
     card: dict,
-    allure_results_dir: str | None = None,
+    html_report_path: str | None = None,
 ) -> bool:
-    """推送测试报告到飞书：先发卡片，再发 Allure 报告文件。
+    """推送测试报告到飞书：先发卡片，再发 HTML 报告文件。
 
     返回 True 表示卡片至少发送成功。
     """
@@ -180,39 +176,22 @@ def push_report(
         logger.error(f"飞书报告卡片发送失败: {e}")
         return False
 
-    if allure_results_dir:
+    if html_report_path:
         try:
-            _upload_allure_report(chat_id, allure_results_dir)
+            _upload_html_report(chat_id, html_report_path)
         except Exception as e:
             logger.error(f"飞书报告文件上传失败: {e}")
 
     return True
 
 
-def _upload_allure_report(chat_id: str, allure_results_dir: str) -> None:
-    """生成 Allure HTML 并打包上传。"""
-    results_path = Path(allure_results_dir)
-    if not results_path.exists() or not list(results_path.iterdir()):
-        logger.warning("Allure 结果目录为空，跳过报告文件上传")
+def _upload_html_report(chat_id: str, html_path: str) -> None:
+    """上传 HTML 报告文件到飞书。"""
+    path = Path(html_path)
+    if not path.exists():
+        logger.warning(f"HTML 报告文件不存在: {html_path}")
         return
 
-    # 生成 Allure HTML
-    html_dir = results_path.parent / f"{results_path.name}_html"
-    cmd = ["allure", "generate", str(results_path), "-o", str(html_dir), "--clean"]
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        logger.error(f"allure generate 失败: {result.stderr}")
-        return
-
-    # 打包 zip
-    zip_path = html_dir.parent / f"{html_dir.name}.zip"
-    shutil.make_archive(str(zip_path.with_suffix("")), "zip", str(html_dir))
-
-    try:
-        file_key = upload_file_to_im(str(zip_path))
-        send_file_message(chat_id, file_key)
-        logger.info("飞书报告文件已发送")
-    finally:
-        # 清理临时文件
-        shutil.rmtree(html_dir, ignore_errors=True)
-        zip_path.unlink(missing_ok=True)
+    file_key = upload_file_to_im(str(path), file_type="stream")
+    send_file_message(chat_id, file_key)
+    logger.info("飞书 HTML 报告文件已发送")

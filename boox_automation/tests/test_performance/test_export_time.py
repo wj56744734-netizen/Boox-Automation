@@ -1,6 +1,14 @@
+import sys
+import os
 import logging
 import re
 import time
+
+# 确保项目根目录在 sys.path 中（兼容直接 python 运行及 VS Code 等不以项目根为 cwd 的方式）
+_project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
+
 import pytest
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.wait import WebDriverWait
@@ -378,3 +386,8 @@ class Test_Note_Export_Time:
         for test_note_name in test_note:
             logging.info(f"🔽 开始执行：笔记内部导出测试 , 测试笔记：{test_note_name}")
             self.export_from_within_note(test_note_name, share_and_export_guide=share_and_export_guide)
+
+
+if __name__ == "__main__":
+    import pytest
+    sys.exit(pytest.main([__file__, "-s"] + sys.argv[1:]))

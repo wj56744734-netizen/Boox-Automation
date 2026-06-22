@@ -221,8 +221,11 @@ def get_sheet_id(spreadsheet_token: str, sheet_name: str) -> str:
 
 
 def use_local_excel() -> bool:
-    """检查是否使用本地 Excel 文件（离线调试）。"""
-    return os.environ.get("USE_LOCAL_EXCEL", "") in ("1", "true", "yes")
+    """检查是否使用本地 Excel 文件（离线调试）。
+    保留以兼容旧代码，新代码请用 excel_source()。
+    """
+    from boox_automation.core.config import excel_source
+    return excel_source() == "local"
 
 
 # ---- 连通性检查 ----

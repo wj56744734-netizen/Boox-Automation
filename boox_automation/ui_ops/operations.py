@@ -1489,24 +1489,149 @@ class Operation_method(Base_note_class):
     # ---- 坐标操作 ----
 
     def click_by_coord(self, element_key: str):
-        """按元素 locator 中的比例坐标点击。locator 格式: x,y（如 0.5,0.3）。"""
+        """按元素 locator 中的比例坐标点击。
+
+        locator 格式:
+          x,y              → 纯坐标点击
+          x,y,【验证tag】   → 点击后按 I 列预期结果验证，不通过则重试
+
+        验证类型由预期结果 Sheet E 列决定（断言存在/不存在/toast/toast不出现）。
+        """
         _push_element_ctx('click_by_coord', element_key)
         info = self.get_element(element_key)
         loc_str = info['locator'][1] if isinstance(info.get('locator'), (list, tuple)) else str(info.get('locator', ''))
+
+        # 解析: x, y [, 【验证tag】]
+        import re as _re
+        verify_tag = ""
+        coord_part = loc_str
+        tag_match = _re.search(r'【(.+?)】', loc_str)
+        if tag_match:
+            verify_tag = tag_match.group(1).strip()
+            coord_part = loc_str[:tag_match.start()].strip().rstrip(',')
+
         try:
-            parts = [p.strip() for p in loc_str.split(',')]
+            parts = [p.strip() for p in coord_part.split(',')]
             x_ratio, y_ratio = float(parts[0]), float(parts[1])
         except (ValueError, IndexError):
-            raise ValueError(f"坐标元素【{element_key}】locator 格式错误: {loc_str}，应为 x,y")
+            raise ValueError(f"坐标元素【{element_key}】locator 格式错误: {loc_str}，应为 x,y 或 x,y,【验证tag】")
 
         screen_size = self.driver.get_window_size()
         x = int(screen_size['width'] * x_ratio)
         y = int(screen_size['height'] * y_ratio)
 
-        with allure.step(f"点击坐标 ({x_ratio:.2f},{y_ratio:.2f})"):
-            self.driver.tap([(x, y)])
-            self._settle_ui()
-            logging.debug(f"[click_by_coord] 坐标点击成功: ({x_ratio:.2f},{y_ratio:.2f}) → 像素({x}, {y})")
+        from boox_automation.core.config import coord_max_tap_retries, coord_tap_retry_delay
+        max_retries = coord_max_tap_retries()
+        retry_delay = coord_tap_retry_delay()
+
+        with allure.step(f"点击坐标 ({x_ratio:.2f},{y_ratio:.2f})"
+                         + (f"验证【{verify_tag}】" if verify_tag else "")):
+            for attempt in range(max_retries):
+                self.driver.tap([(x, y)])
+                self._settle_ui()
+
+                if not verify_tag:
+                    logging.debug(
+                        f"[click_by_coord] 坐标点击成功: "
+                        f"({x_ratio:.2f},{y_ratio:.2f}) → 像素({x}, {y})")
+                    return
+
+                if self._verify_coord_tag(verify_tag):
+                    logging.debug(
+                        f"[click_by_coord] 坐标点击+验证通过 "
+                        f"(尝试 {attempt + 1}/{max_retries})")
+                    return
+
+                logging.debug(
+                    f"[click_by_coord] 验证未通过，重试 {attempt + 1}/{max_retries}")
+                if attempt < max_retries - 1:
+                    time.sleep(retry_delay)
+
+            raise AssertionError(
+                f"坐标点击【{element_key}】重试 {max_retries} 次后"
+                f"验证【{verify_tag}】仍失败")
+
+    def _verify_coord_tag(self, tag: str) -> bool:
+        """验证坐标点击后的预期结果。复用 I 列预期结果机制。
+
+        Returns: True=验证通过，False=未通过。
+        """
+        from boox_automation.engine.elements import (
+            _EXPECTED_ACTION_MAP, _resolve_device_content,
+            _check_elements_by_xpath, _load_expected_from_file,
+            ElementLoader,
+        )
+        from boox_automation.engine.xml_checker import XmlChecker
+        from boox_automation.core.config import coord_verify_timeout
+
+        expected_key = self.element_loader.match_expected_result(tag)
+        if not expected_key:
+            logging.warning(f"[坐标验证] 【{tag}】未在预期结果 B 列中匹配")
+            return False
+
+        page_info = self.element_loader.get_expected_page(expected_key)
+        if not page_info:
+            logging.warning(f"[坐标验证] 【{tag}】（key={expected_key}）未找到预期结果定义")
+            return False
+
+        action = page_info.get("action", "")
+        check_mode = _EXPECTED_ACTION_MAP.get(action, "")
+        if not check_mode:
+            logging.warning(f"[坐标验证] 【{tag}】E列操作无效: '{action}'")
+            return False
+
+        verify_timeout = coord_verify_timeout()
+
+        # toast / toast不出现
+        if check_mode == 'toast':
+            toast_text = page_info.get("match", tag)
+            return bool(self.wait_check_toast(
+                toast_true=toast_text, toast_timeout=verify_timeout))
+        elif check_mode == 'toast_not':
+            toast_text = page_info.get("match", tag)
+            return not bool(self.wait_check_toast(
+                toast_true=toast_text, toast_timeout=verify_timeout))
+
+        # 可见 / 不可见
+        device_info = ElementLoader._get_device_info()
+
+        # D 列: XPath 元素检查
+        element_checks = page_info.get("element_checks", "")
+        if element_checks:
+            resolved = _resolve_device_content(
+                element_checks, device_info, key=expected_key)
+            if resolved:
+                try:
+                    _check_elements_by_xpath(
+                        resolved, mode=check_mode,
+                        expected_key=expected_key)
+                    return True
+                except (AssertionError, ValueError):
+                    return False
+
+        # C 列: XML 对比
+        raw_content = page_info.get("content", "")
+        content = ""
+        if raw_content:
+            content = _resolve_device_content(
+                raw_content, device_info, key=expected_key) or ""
+
+        if not content:
+            file_content = _load_expected_from_file(expected_key)
+            if file_content:
+                content = _resolve_device_content(
+                    file_content, device_info, key=expected_key) or ""
+
+        if content:
+            try:
+                actual_xml = self.driver.page_source
+                result = XmlChecker.check(content, actual_xml, mode=check_mode)
+                return result.status == "pass"
+            except Exception:
+                return False
+
+        logging.warning(f"[坐标验证] 【{tag}】C列和D列均为空，无法验证")
+        return False
 
     def long_press_by_coord(self, element_key: str, duration: int = 2000):
         """按元素 locator 中的比例坐标长按。locator 格式: x,y（如 0.5,0.3）。"""

@@ -2,7 +2,14 @@
 
 模块名来自 test_case_sheets 配置，"通用"始终自动包含。
 """
+import os
+import sys
 import logging
+
+# 确保项目根目录在 sys.path 中（兼容直接 python 运行及 VS Code 等不以项目根为 cwd 的方式）
+_project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
 
 from boox_automation.core.feishu import get_sheet_id, write_sheet_values, list_sheet_names
 from boox_automation.core.config import feishu_elements_token, test_case_sheets
