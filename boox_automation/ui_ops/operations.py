@@ -1676,6 +1676,63 @@ class Operation_method(Base_note_class):
             logging.debug(f"[swipe_by_coord] 坐标滑动成功: ({x1:.2f},{y1:.2f})→({x2:.2f},{y2:.2f}) "
                           f"像素({start_x},{start_y})→({end_x},{end_y}) {duration}ms")
 
+    # ---- ADB 命令执行 ----
+
+    def execute_adb_command(self, element_key: str):
+        """执行 ADB 命令（对应 ADB命令 sheet）。
+
+        成功 → INFO 日志；失败/超时 → ERROR 日志。
+        不重试、不联动断言、失败不中断用例。
+        """
+        import subprocess, shlex
+        from boox_automation.core.config import adb_command_timeout
+
+        info = self.get_element(element_key)
+        loc = info.get('locator', (None, ""))
+        loc_str = loc[1] if isinstance(loc, (list, tuple)) and len(loc) >= 2 else str(loc)
+        cmd_name = info.get('match', element_key)
+
+        # 多设备块解析（locator 已由 get_element_info 解析过，此处作为兜底）
+        from boox_automation.engine.elements import ElementLoader, _resolve_device_content
+        device_info = ElementLoader._get_device_info()
+        adb_cmd = _resolve_device_content(loc_str, device_info) or loc_str.strip()
+        if not adb_cmd:
+            logging.error(f"[ADB命令] 命令为空: {cmd_name}")
+            return
+
+        # 获取 device_id
+        from boox_automation.devices.info import Device_basic_information
+        device_id = ""
+        try:
+            dbi = Device_basic_information()
+            device_id = dbi.get_connected_device_ids()
+        except Exception:
+            pass
+
+        full_cmd = f"adb -s {device_id} {adb_cmd}" if device_id else f"adb {adb_cmd}"
+        timeout = adb_command_timeout()
+
+        with allure.step(f"ADB命令「{cmd_name}」"):
+            try:
+                result = subprocess.run(
+                    shlex.split(full_cmd), capture_output=True, text=True, timeout=timeout,
+                )
+            except subprocess.TimeoutExpired:
+                logging.error(f"[ADB命令] 执行超时({timeout}s): {cmd_name}")
+                return
+
+        if result.returncode == 0:
+            logging.info(f"[ADB命令] 执行成功: {cmd_name}")
+            if result.stdout:
+                logging.debug(f"[ADB命令] stdout: {result.stdout.strip()}")
+        else:
+            stderr = (result.stderr or "").strip()
+            logging.error(
+                f"[ADB命令] 执行失败: {cmd_name}"
+                f" | exit={result.returncode}"
+                + (f" | stderr: {stderr}" if stderr else "")
+            )
+
     # ---- 等待弹窗消失 ----
 
     def by_pop_time(self, by_method=None, locator=None, timeout=None, prompt=None, *, element_key=None):

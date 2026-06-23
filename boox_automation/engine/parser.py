@@ -162,8 +162,14 @@ def parse_preconditions(raw_text: str | None) -> list[Precondition]:
             ))
             continue
 
-        # 4. 描述型（保留完整行文本，【】只是内联引用非条件关键字）
-        preconditions.append(Precondition(raw=line, type="descriptive"))
+        # 4. 文件检查候选（【】不在内置关键字中，运行时查表确认）
+        tag = tags[0].strip()
+        preconditions.append(Precondition(
+            raw=tag,
+            type="file_check_candidate",
+            kind=tag,
+            skip_reason=f"前置条件不满足: 【{tag}】",
+        ))
 
     return preconditions
 
@@ -194,15 +200,23 @@ _FIELD_LABEL: dict[str, str] = {
 }
 
 
-def check_conditions(preconditions: list, device_info: dict) -> str | None:
+def check_conditions(preconditions: list, device_info: dict, device_id: str = "") -> str | None:
     """检查所有条件型前置条件，全部通过返回 None，第一个不通过返回 skip_reason。"""
     for pc in preconditions:
-        if pc.type != "condition":
-            continue
+        if pc.type == "condition":
+            ok = _check_one(pc, device_info)
+            if not ok:
+                return _build_skip_reason(pc, device_info)
 
-        ok = _check_one(pc, device_info)
-        if not ok:
-            return _build_skip_reason(pc, device_info)
+        elif pc.type == "file_check_candidate":
+            from boox_automation.engine.elements import get_element_loader
+            loader = get_element_loader()
+            pc_info = loader.get_precondition(pc.kind)
+            if pc_info:
+                ok, reason = _check_file(pc_info, device_info, device_id)
+                if not ok:
+                    return reason
+            # 未命中 → 降级为 descriptive，不阻断
 
     return None
 
@@ -273,6 +287,55 @@ def _build_skip_reason(pc, device_info: dict) -> str:
         return f"前置条件不满足: {label}为{actual}，要求{allowed_list}"
 
     return pc.skip_reason
+
+
+def _check_file(pc_info: dict, device_info: dict, device_id: str) -> tuple[bool, str]:
+    """执行文件存在/不存在检查。返回 (通过, skip_reason)。"""
+    import subprocess
+
+    check_type = pc_info.get("check_type", "文件存在")
+    path_raw = pc_info.get("path", "")
+
+    # 多设备块解析
+    from boox_automation.engine.elements import _resolve_device_content
+    path = _resolve_device_content(path_raw, device_info)
+    if not path:
+        return True, ""  # 无匹配设备块 → 跳过文件检查
+
+    path = path.strip()
+    is_exists_check = check_type == "文件存在"
+
+    # 获取 device_id
+    if not device_id:
+        try:
+            from boox_automation.devices.info import Device_basic_information
+            dbi = Device_basic_information()
+            device_id = dbi.get_connected_device_ids()
+        except Exception:
+            pass
+
+    if not device_id:
+        return False, f"前置条件不满足: 无法获取设备ID进行文件检查 — {path}"
+
+    # 执行 adb shell "test -f <path>"
+    flag = "-f" if is_exists_check else "! -f"
+    cmd = ["adb", "-s", device_id, "shell", f"test {flag} {path}"]
+
+    from boox_automation.core.config import adb_command_timeout
+    timeout = adb_command_timeout()
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return False, f"前置条件不满足: 文件检查超时({timeout}s) — {path}"
+
+    ok = result.returncode == 0
+
+    if ok:
+        return True, ""
+
+    reason = f"文件{'不存在' if is_exists_check else '仍存在'} — {path}"
+    return False, f"前置条件不满足: {reason}"
 
 
 def validate_case(case: ParsedCase) -> str | None:

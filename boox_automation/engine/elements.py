@@ -38,6 +38,7 @@ _ACTION_CN_TO_EN = {
     "点击坐标": "click_coord",
     "长按坐标": "long_press_coord",
     "滑动": "swipe_coord",
+    "adb命令": "adb_cmd",
 }
 
 
@@ -353,6 +354,8 @@ class ElementLoader:
         self._key_source: dict = {}  # element_key → sheet name
         self._expected_results: dict = {}      # key → expected page info
         self._expected_match_index: dict = {}  # match文本 → key
+        self._preconditions: dict[str, dict] = {}  # 条件名称 → 前置条件信息
+        self._adb_commands: dict[str, dict] = {}   # 命令名称 → adb命令信息
         # 诊断信息：记录预期结果加载过程
         self._expected_modules: list[str] = []
         self._expected_sheets_found: list[str] = []
@@ -425,8 +428,13 @@ class ElementLoader:
             if source.startswith("feishu::"):
                 sheet_name = source.split("::", 1)[1]
                 sheet_data.setdefault(sheet_name, {})[key] = self._elements[key]
-        if sheet_data:
-            save_cache({"sheets": sheet_data, "key_source": self._key_source}, "elements")
+        cache_payload = {"sheets": sheet_data, "key_source": self._key_source}
+        if self._preconditions:
+            cache_payload["_preconditions"] = self._preconditions
+        if self._adb_commands:
+            cache_payload["_adb_commands"] = self._adb_commands
+        if sheet_data or self._preconditions or self._adb_commands:
+            save_cache(cache_payload, "elements")
 
     def _load_from_cache(self) -> bool:
         """从缓存加载元素数据，成功返回 True。"""
@@ -436,13 +444,21 @@ class ElementLoader:
             return False
         sheet_data = cached.get("sheets", {})
         key_source = cached.get("key_source", {})
-        if not sheet_data:
+        if not sheet_data and not cached.get("_preconditions") and not cached.get("_adb_commands"):
             return False
         for sheet_name, elements in sheet_data.items():
             for key, info in elements.items():
                 self._elements[key] = info
         self._key_source.update(key_source)
-        logger.debug(f"已从缓存加载 {len(self._elements)} 个元素定义")
+        if cached.get("_preconditions"):
+            self._preconditions.update(cached["_preconditions"])
+        if cached.get("_adb_commands"):
+            self._adb_commands.update(cached["_adb_commands"])
+        logger.debug(
+            f"已从缓存加载 {len(self._elements)} 个元素定义"
+            + (f", {len(self._preconditions)} 条前置条件" if self._preconditions else "")
+            + (f", {len(self._adb_commands)} 条ADB命令" if self._adb_commands else "")
+        )
         return True
 
     def _load_from_local_xlsx(self, xlsx_path: str | None = None):
@@ -511,6 +527,22 @@ class ElementLoader:
                 total += 1
 
         logger.debug(f"已从飞书加载 {total} 个元素定义 ({len(element_sheets)} 个工作表)")
+
+        # ── 加载前置条件 sheet ──
+        if "前置条件" in all_sheets:
+            try:
+                rows = read_sheet_by_name("前置条件", token)
+                self._parse_precondition_rows(rows)
+            except Exception:
+                logger.warning("加载「前置条件」sheet 失败，前置条件文件检查将跳过")
+
+        # ── 加载 ADB命令 sheet ──
+        if "ADB命令" in all_sheets:
+            try:
+                rows = read_sheet_by_name("ADB命令", token)
+                self._parse_adb_cmd_rows(rows, sheet_name="ADB命令", source_prefix="feishu")
+            except Exception:
+                logger.warning("加载「ADB命令」sheet 失败，ADB命令步骤将跳过")
 
     # ---- 预期结果 sheet 加载 ----
 
@@ -748,6 +780,93 @@ class ElementLoader:
                 f"已搜索: {', '.join(f'预期结果【{m}】' for m in modules)}"
             )
 
+    def _parse_precondition_rows(self, rows: list[list[str]]):
+        """解析前置条件 sheet 行数据（4 列）。
+
+        列结构: 条件名称 | 检查类型 | 文件路径 | 用途说明
+        """
+        if not rows or len(rows) < 2:
+            return
+        h_idx = _find_header_row(rows)
+        from boox_automation.engine.schema import (
+            PRECOND_COL_NAME, PRECOND_COL_CHECK_TYPE,
+            PRECOND_COL_PATH, PRECOND_COL_DESC,
+        )
+
+        for row in rows[h_idx + 1:]:
+            if not row or len(row) <= PRECOND_COL_NAME or not row[PRECOND_COL_NAME]:
+                continue
+            name = str(row[PRECOND_COL_NAME]).strip()
+            if not name:
+                continue
+            check_type = str(row[PRECOND_COL_CHECK_TYPE]).strip() if len(row) > PRECOND_COL_CHECK_TYPE and row[PRECOND_COL_CHECK_TYPE] else ""
+            path = str(row[PRECOND_COL_PATH]).strip() if len(row) > PRECOND_COL_PATH and row[PRECOND_COL_PATH] else ""
+            desc = str(row[PRECOND_COL_DESC]).strip() if len(row) > PRECOND_COL_DESC and row[PRECOND_COL_DESC] else ""
+
+            if not check_type:
+                logger.warning(f"前置条件「{name}」B列（检查类型）为空，跳过")
+                continue
+            if check_type not in ("文件存在", "文件不存在"):
+                logger.warning(f"前置条件「{name}」B列无效值'{check_type}'，有效值: 文件存在 / 文件不存在，跳过")
+                continue
+            if not path:
+                logger.warning(f"前置条件「{name}」C列（文件路径）为空，跳过")
+                continue
+
+            self._preconditions[name] = {
+                "name": name,
+                "check_type": check_type,
+                "path": path,
+                "description": desc,
+            }
+        logger.debug(f"已加载 {len(self._preconditions)} 条前置条件文件检查")
+
+    def _parse_adb_cmd_rows(self, rows: list[list[str]], sheet_name: str = "ADB命令",
+                            source_prefix: str = ""):
+        """解析 ADB命令 sheet 行数据（3 列），写入 _adb_commands 和 _elements。
+
+        列结构: 命令名称 | adb命令 | 用途说明
+        """
+        if not rows or len(rows) < 2:
+            return
+        h_idx = _find_header_row(rows)
+        from boox_automation.engine.schema import (
+            ADB_CMD_COL_NAME, ADB_CMD_COL_COMMAND, ADB_CMD_COL_DESC,
+        )
+
+        headers = [str(c).strip() for c in rows[h_idx]]
+        count = 0
+
+        for row in rows[h_idx + 1:]:
+            if not row or len(row) <= ADB_CMD_COL_NAME or not row[ADB_CMD_COL_NAME]:
+                continue
+            name = str(row[ADB_CMD_COL_NAME]).strip()
+            if not name:
+                continue
+            command = str(row[ADB_CMD_COL_COMMAND]).strip() if len(row) > ADB_CMD_COL_COMMAND and row[ADB_CMD_COL_COMMAND] else ""
+            desc = str(row[ADB_CMD_COL_DESC]).strip() if len(row) > ADB_CMD_COL_DESC and row[ADB_CMD_COL_DESC] else ""
+
+            if not command:
+                logger.warning(f"ADB命令「{name}」B列（adb命令）为空，跳过")
+                continue
+
+            key = f"{sheet_name}.{name}"
+            info = self._parse_row(row, headers, key=key)
+            info["action"] = "adb_cmd"
+            info["match"] = name
+
+            self._elements[key] = info
+            self._adb_commands[name] = {
+                "name": name,
+                "command": command,
+                "description": desc,
+            }
+            if source_prefix:
+                self._key_source[key] = f"{source_prefix}::{sheet_name}"
+            count += 1
+
+        logger.debug(f"已加载 {count} 条 ADB 命令定义")
+
     def _parse_expected_rows(self, rows: list[list[str]]):
         """解析预期结果 sheet 行数据（6 列）。
 
@@ -872,9 +991,11 @@ class ElementLoader:
     _HEADER_MAP = {
         "元素标识": "key",
         "模块": "key",          # 新格式：模块列 = key 前缀，需与匹配文本拼接
+        "命令名称": "key",       # ADB命令 sheet A列
         "匹配文本": "match",
         "定位方式": "locator",
         "定位元素": "locator",  # 新格式：定位元素 = locator
+        "adb命令": "locator",   # ADB命令 sheet B列
         "操作类型": "action",
         "操作": "action",       # 新格式：操作 = action
         "用途说明": "operation",
@@ -933,6 +1054,26 @@ class ElementLoader:
                 continue
             if _EXPECTED_SHEET_MODULE_RE.match(sheet_name):
                 continue  # 预期结果 sheet 不加载为元素
+
+            # ── 前置条件 sheet 特殊处理 ──
+            if sheet_name == "前置条件":
+                ws = wb[sheet_name]
+                rows = []
+                for row in ws.iter_rows(min_row=1, values_only=True):
+                    rows.append([str(v) if v is not None else "" for v in row])
+                self._parse_precondition_rows(rows)
+                continue
+
+            # ── ADB命令 sheet 特殊处理 ──
+            if sheet_name == "ADB命令":
+                ws = wb[sheet_name]
+                rows = []
+                for row in ws.iter_rows(min_row=1, values_only=True):
+                    rows.append([str(v) if v is not None else "" for v in row])
+                self._parse_adb_cmd_rows(rows, sheet_name="ADB命令",
+                                         source_prefix=f"{xlsx_path}")
+                continue
+
             ws = wb[sheet_name]
             # 读取所有行（1-indexed → 0-indexed 列表）
             all_rows = []
@@ -1036,6 +1177,16 @@ class ElementLoader:
         """返回元素键所在的 YAML 文件路径，未找到返回 None。"""
         self._ensure_loaded()
         return self._key_source.get(element_key)
+
+    def get_precondition(self, name: str) -> dict | None:
+        """按条件名称获取前置条件信息。"""
+        self._ensure_loaded()
+        return self._preconditions.get(name)
+
+    def get_adb_command(self, name: str) -> dict | None:
+        """按命令名称获取 adb 命令信息。"""
+        self._ensure_loaded()
+        return self._adb_commands.get(name)
 
     def __contains__(self, element_key: str) -> bool:
         self._ensure_loaded()
@@ -1236,7 +1387,7 @@ class ElementMatcher:
 
         explicit = info.get("action", "")
         valid_actions = ("click", "assert_toast", "input", "long_press",
-                         "click_coord", "long_press_coord", "swipe_coord")
+                         "click_coord", "long_press_coord", "swipe_coord", "adb_cmd")
         if explicit in valid_actions:
             return explicit
 

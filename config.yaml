@@ -55,6 +55,9 @@ adb:
   command_retries: 3        # 次
   command_delay: 2          # 秒
 
+  # ADB命令 sheet 中命令的执行超时
+  command_timeout: 10       # 秒
+
   # 应用数据清理命令（由前置条件【清理应用数据】触发）
   cleanup:
     app_data:
@@ -74,7 +77,7 @@ excel:
   #   cache — 仅从本地缓存加载，无缓存直接报错
   #   local — 仅从本地路径加载，文件不存在直接报错
   # 环境变量 NOTE_EXCEL_SOURCE 可覆盖
-  source: "local"
+  source: "cloud"
 
   # --- 用例 ---
   # 要加载的用例 Sheet 名列表，云端/本地共用
@@ -84,7 +87,7 @@ excel:
   # - "设置"    ← 后续模块结构对齐后取消注释即可
 
   # 优先级筛选：P0=仅P0  P1=P1+P2  P2=仅P2  test=仅test  空=全部
-  priority_filter: ""
+  priority_filter: "test"  # 环境变量 NOTE_TEST_PRIORITY 可覆盖
 
   # 模块筛选：逗号分隔，仅运行 C 列匹配的模块。空=全部
   # 环境变量 NOTE_TEST_MODULES 可覆盖（逗号分隔）
@@ -93,12 +96,12 @@ excel:
   # 本地用例文件路径（仅 source=local 时生效）
   # 支持相对路径（相对于项目根目录）或绝对路径
   # 环境变量 NOTE_TEST_CASE_PATH 可覆盖
-  test_case_path: "/Users/xiaoyu/PycharmProjects/boox-automation/boox_automation/data/test_cases.xlsx"
+  test_case_path: "/Users/xiaoyu/Automation_projects/boox-automation/boox_automation/data/test_cases.xlsx"
 
   # --- 元素 ---
   # 本地元素文件路径（仅 source=local 时生效）
   # 环境变量 NOTE_ELEMENTS_PATH 可覆盖
-  elements_path: "/Users/xiaoyu/PycharmProjects/boox-automation/boox_automation/data/elements.xlsx"
+  elements_path: "/Users/xiaoyu/Automation_projects/boox-automation/boox_automation/data/elements.xlsx"
 
   # 用例表列索引（0-based）
   columns:

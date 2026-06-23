@@ -265,6 +265,11 @@ def adb_command_delay() -> int:
     return get_int("adb.command_delay", 2)
 
 
+def adb_command_timeout() -> int:
+    """ADB 命令执行超时（秒），用于 ADB命令 sheet 中的命令。"""
+    return get_int("adb.command_timeout", 10)
+
+
 def adb_cleanup_app_data_packages() -> list[str]:
     """【清理应用数据】pm clear 目标包名列表。环境变量 ADB_CLEANUP_PACKAGES 逗号分隔可覆盖。"""
     env = os.environ.get("ADB_CLEANUP_PACKAGES")

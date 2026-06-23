@@ -52,6 +52,16 @@ def _get_device_info_safe() -> dict:
         return {}
 
 
+def _get_device_id_safe() -> str:
+    """安全获取当前连接的设备ID，失败返回空字符串。"""
+    try:
+        from boox_automation.devices.info import Device_basic_information
+        dbi = Device_basic_information()
+        return dbi.get_connected_device_ids() or ""
+    except Exception:
+        return ""
+
+
 _element_matcher = ElementMatcher()
 
 
@@ -331,7 +341,8 @@ class TestExcelRunner:
 
         # 前置条件检查
         device_info = _get_device_info_safe()
-        runtime_skip = check_conditions(case.preconditions, device_info)
+        device_id = _get_device_id_safe()
+        runtime_skip = check_conditions(case.preconditions, device_info, device_id=device_id)
         if runtime_skip:
             case.skip_reason = runtime_skip
             pytest.skip(runtime_skip)
@@ -449,6 +460,9 @@ def _dispatch_step(method, public, step):
 
     elif step.action == "swipe_coord":
         method.swipe_by_coord(ek)
+
+    elif step.action == "adb_cmd":
+        method.execute_adb_command(ek)
 
     else:
         logging.warning(f"步骤{step.seq}: 【{step.tag}】未知动作类型: {step.action}")
