@@ -16,7 +16,6 @@ _project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
-import allure
 import pytest
 import openpyxl
 from boox_automation.driver import driver
@@ -168,7 +167,17 @@ def _apply_filters(cases: list[ParsedCase], priority_spec: str) -> list[ParsedCa
 
 
 def _load_cases(excel_path: str, sheets: list[str], priority_spec: str) -> list[ParsedCase]:
-    """按配置的 excel_source 加载用例（单一路径，不回退）。"""
+    """按配置的 excel_source 加载用例（单一路径，不回退）。
+
+    NOTE_TEST_CASE_PATH 可覆盖用例文件路径（与 excel_source 独立），
+    便于试点批次：元素/预期走 cache，用例走本地 pilot xlsx。
+    """
+    env_case = os.environ.get("NOTE_TEST_CASE_PATH", "").strip()
+    if env_case and Path(env_case).is_file():
+        logger.info(f"用例加载: NOTE_TEST_CASE_PATH 覆盖 — {env_case}")
+        sheet_data = _read_local_sheets(env_case, sheets)
+        return _parse_cases_from_sheets(sheet_data, sheets, priority_spec)
+
     source = excel_source()
 
     if source == "local":
@@ -321,7 +330,6 @@ if not _executable:
     _executable = [_no_case]
 
 
-@allure.feature("Excel驱动测试")
 class TestExcelRunner:
 
     def setup_method(self):
@@ -384,31 +392,30 @@ class TestExcelRunner:
         expected_consumed: dict[str, int] = {}
 
         try:
-            with allure.step(case_id):
-                for step in steps:
-                    clear_element_ctx()
-                    set_step_context(f"R{case.row_number} 步骤{step.seq}")
-                    logger.info(f"  {step.raw.strip()}")
-                    _dispatch_step(self.method, self.public, step)
-                    step.status = "pass"
-                    clear_step_context()
-                    # 检查步骤 → 按 tag 关联到预期结果
-                    if step.action == "skip" and step.tag:
-                        _check_expected_by_tag(
-                            self.method, expected_by_tag, expected_consumed, step,
-                            row=case.row_number, title=case.title)
+            for step in steps:
+                clear_element_ctx()
+                set_step_context(f"R{case.row_number} 步骤{step.seq}")
+                logger.info(f"  {step.raw.strip()}")
+                _dispatch_step(self.method, self.public, step)
+                step.status = "pass"
+                clear_step_context()
+                # 检查步骤 → 按 tag 关联到预期结果
+                if step.action == "skip" and step.tag:
+                    _check_expected_by_tag(
+                        self.method, expected_by_tag, expected_consumed, step,
+                        row=case.row_number, title=case.title)
 
-                # 最终检查：I 列未消费的预期结果（DEBUG，仅调试时可见）
-                unconsumed = []
-                for tag, entries in expected_by_tag.items():
-                    used = expected_consumed.get(tag, 0)
-                    for i in range(used, len(entries)):
-                        unconsumed.append(entries[i].raw)
-                if unconsumed:
-                    logger.debug(
-                        f"R{case.row_number} 预期结果中以下行未匹配到检查步骤:\n" +
-                        "\n".join(f"  ↳ {u}" for u in unconsumed)
-                    )
+            # 最终检查：I 列未消费的预期结果（DEBUG，仅调试时可见）
+            unconsumed = []
+            for tag, entries in expected_by_tag.items():
+                used = expected_consumed.get(tag, 0)
+                for i in range(used, len(entries)):
+                    unconsumed.append(entries[i].raw)
+            if unconsumed:
+                logger.debug(
+                    f"R{case.row_number} 预期结果中以下行未匹配到检查步骤:\n" +
+                    "\n".join(f"  ↳ {u}" for u in unconsumed)
+                )
             logger.info(f"⏐ PASSED  {case_id}")
         except Exception as e:
             for s in steps:

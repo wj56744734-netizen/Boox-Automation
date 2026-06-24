@@ -87,7 +87,7 @@ excel:
   # - "设置"    ← 后续模块结构对齐后取消注释即可
 
   # 优先级筛选：P0=仅P0  P1=P1+P2  P2=仅P2  test=仅test  空=全部
-  priority_filter: "test"  # 环境变量 NOTE_TEST_PRIORITY 可覆盖
+  priority_filter: "P0"  # 环境变量 NOTE_TEST_PRIORITY 可覆盖
 
   # 模块筛选：逗号分隔，仅运行 C 列匹配的模块。空=全部
   # 环境变量 NOTE_TEST_MODULES 可覆盖（逗号分隔）
@@ -96,12 +96,12 @@ excel:
   # 本地用例文件路径（仅 source=local 时生效）
   # 支持相对路径（相对于项目根目录）或绝对路径
   # 环境变量 NOTE_TEST_CASE_PATH 可覆盖
-  test_case_path: "/Users/xiaoyu/Automation_projects/boox-automation/boox_automation/data/test_cases.xlsx"
+  test_case_path: "xxx"
 
   # --- 元素 ---
   # 本地元素文件路径（仅 source=local 时生效）
   # 环境变量 NOTE_ELEMENTS_PATH 可覆盖
-  elements_path: "/Users/xiaoyu/Automation_projects/boox-automation/boox_automation/data/elements.xlsx"
+  elements_path: "xxx"
 
   # 用例表列索引（0-based）
   columns:

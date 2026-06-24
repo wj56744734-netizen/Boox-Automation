@@ -197,6 +197,9 @@ def _resolve_local_path(raw: str) -> str:
 
 
 def excel_priority_filter() -> str:
+    env = os.environ.get("NOTE_TEST_PRIORITY", "").strip()
+    if env:
+        return env
     return get_str("excel.priority_filter", "P0")
 
 

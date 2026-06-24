@@ -13,11 +13,11 @@ from boox_automation.ui_ops.operations import Operation_method
 from boox_automation.tests.helpers import Public_method
 from boox_automation.driver import driver
 from selenium.webdriver.common.by import By
-import allure
+
 import logging
 import pytest
 
-@allure.feature("笔记导入、导出文件相关测试类")
+
 class Test_import_the_file:
 
     def setup_method(self):

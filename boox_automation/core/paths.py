@@ -5,8 +5,7 @@
 NOTE_ARTIFACTS_ROOT 改写到外部目录（CI 场景常用）。
 
 目录约定：
-- artifacts/allure_results/<timestamp>/   pytest --alluredir 写入
-- artifacts/allure_html/<timestamp>/      allure generate 输出
+
 - artifacts/screenshots/<YYYY-MM-DD>/     失败截图等运行期截图
 - artifacts/logs/                         备用：测试日志
 - artifacts/tmp/                          临时下载、中间文件
@@ -29,8 +28,7 @@ def get_artifacts_root() -> Path:
 
 
 ARTIFACTS_ROOT = get_artifacts_root()
-ALLURE_RESULTS_ROOT = ARTIFACTS_ROOT / "allure_results"
-ALLURE_HTML_ROOT = ARTIFACTS_ROOT / "allure_html"
+
 SCREENSHOTS_ROOT = ARTIFACTS_ROOT / "screenshots"
 LOGS_ROOT = ARTIFACTS_ROOT / "logs"
 TMP_ROOT = ARTIFACTS_ROOT / "tmp"
@@ -45,15 +43,6 @@ def ensure_dir(path: Path) -> Path:
     path.mkdir(parents=True, exist_ok=True)
     return path
 
-
-def new_allure_results_dir(timestamp: str | None = None) -> Path:
-    ts = timestamp or datetime.now().strftime("%Y%m%d%H%M%S")
-    return ensure_dir(ALLURE_RESULTS_ROOT / f"Test_{ts}")
-
-
-def new_allure_html_dir(timestamp: str | None = None) -> Path:
-    ts = timestamp or datetime.now().strftime("%Y%m%d%H%M%S")
-    return ensure_dir(ALLURE_HTML_ROOT / f"Test_html_{ts}")
 
 
 def screenshot_dir_today() -> Path:
@@ -73,15 +62,11 @@ def safe_screenshot_path(name: str) -> Path:
 __all__ = [
     "PROJECT_ROOT",
     "ARTIFACTS_ROOT",
-    "ALLURE_RESULTS_ROOT",
-    "ALLURE_HTML_ROOT",
     "SCREENSHOTS_ROOT",
     "LOGS_ROOT",
     "TMP_ROOT",
     "DEFAULT_KEEP_LATEST",
     "ensure_dir",
-    "new_allure_results_dir",
-    "new_allure_html_dir",
     "screenshot_dir_today",
     "safe_screenshot_path",
 ]

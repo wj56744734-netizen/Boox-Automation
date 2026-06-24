@@ -56,6 +56,7 @@ class Public_method:
         self.method = Operation_method(self.driver)
 
     def get_version(self, short=False):
+        version_info = _get_device_info().get('version_info', '')
         if not version_info:
             return None
         match = re.search(r'[vV]?\d+\.\d+(?:\.\d+)?', version_info)

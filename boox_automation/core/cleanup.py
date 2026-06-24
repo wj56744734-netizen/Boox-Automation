@@ -1,5 +1,5 @@
 """
-集中清理项目运行期产物：保留最近 N 轮 allure / html / screenshots。
+集中清理项目运行期产物：保留最近 N 轮 screenshots / logs。
 
 调用方式：
 - pytest 会话结束时自动调用 cleanup_artifacts()
@@ -13,8 +13,6 @@ import sys
 from pathlib import Path
 
 from boox_automation.core.paths import (
-    ALLURE_HTML_ROOT,
-    ALLURE_RESULTS_ROOT,
     DEFAULT_KEEP_LATEST,
     LOGS_ROOT,
     SCREENSHOTS_ROOT,
@@ -83,8 +81,6 @@ def _format_size(num: int) -> str:
 def cleanup_artifacts(keep_latest: int = DEFAULT_KEEP_LATEST, dry_run: bool = False) -> dict:
     """对各分类目录按 keep_latest 策略清理；返回每类统计。"""
     targets = {
-        "allure_results": ALLURE_RESULTS_ROOT,
-        "allure_html": ALLURE_HTML_ROOT,
         "screenshots": SCREENSHOTS_ROOT,
         "logs": LOGS_ROOT,
     }

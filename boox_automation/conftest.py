@@ -97,12 +97,6 @@ def pytest_configure(config):
         root_logger.removeHandler(handler)
     root_logger.addHandler(logging.NullHandler())
 
-    # 动态设置 allure 结果目录
-    try:
-        from boox_automation.core.paths import new_allure_results_dir
-        config.option.allure_report_dir = str(new_allure_results_dir())
-    except Exception:
-        pass
 
 def pytest_collection_modifyitems(config, items):
     """统一过滤指定用例（兼容直接 pytest 与报告入口）"""
