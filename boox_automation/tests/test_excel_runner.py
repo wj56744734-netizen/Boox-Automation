@@ -144,6 +144,21 @@ def _resolve_case_elements(cases: list[ParsedCase]) -> list[ParsedCase]:
                     f"当前 B 列已有: {', '.join(index_keys) if index_keys else '(空)'}"
                 )
 
+    # 收集阶段输出预期结果加载摘要
+    diag = _loader.get_expected_diagnostics()
+    total = diag.get("total_results", 0)
+    skipped = diag.get("skipped", [])
+    if total or skipped:
+        found_str = '、'.join(diag.get("sheets_found", [])) or "无"
+        logger.info(
+            f"预期结果: 有效 {total} 条，跳过 {len(skipped)} 条"
+            f"（工作表: {found_str}）"
+        )
+        for s in skipped:
+            logger.warning(
+                f"  ↳ 跳过 第{s['row']}行【{s['key']}】: {s['reason']}"
+            )
+
     return cases
 
 

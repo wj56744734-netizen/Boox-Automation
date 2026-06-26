@@ -697,6 +697,7 @@ class ElementLoader:
             save_cache({
                 "expected_results": self._expected_results,
                 "expected_match_index": self._expected_match_index,
+                "skipped": list(self._skipped_expected),
             }, "expected_results")
 
     def _load_expected_from_cache(self) -> bool:
@@ -711,6 +712,7 @@ class ElementLoader:
             return False
         self._expected_results.update(er_data)
         self._expected_match_index.update(match_idx)
+        self._skipped_expected = cached.get("skipped", [])
         self._expected_sheets_found = ["(缓存)"]
         self._expected_sheets_missing = []
         logger.debug(
