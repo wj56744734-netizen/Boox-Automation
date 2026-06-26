@@ -1303,10 +1303,19 @@ class Operation_method(Base_note_class):
         except Exception:
             actual = ""
         if actual and actual != str(input_text).strip():
-            logging.debug(f"输入验证失败: 期望='{input_text}' 实际='{actual}'，重试")
-            self._clear_input(input_box)
-            input_box.send_keys(input_text)
-            self._settle_ui(0.5 if len(input_text) > 100 else 0.2)
+            # App 端截断（如 EditText maxLength）：actual 是 input_text 的前缀 → 无需重试
+            if str(input_text).strip().startswith(actual):
+                logging.debug(
+                    f"输入被截断（可能已达字数上限）: "
+                    f"期望 {len(input_text)} 字 → 实际写入 {len(actual)} 字"
+                )
+            else:
+                logging.debug(
+                    f"输入验证失败: 期望={len(input_text)}字 实际={len(actual)}字，重试"
+                )
+                self._clear_input(input_box)
+                input_box.send_keys(input_text)
+                self._settle_ui(0.5 if len(input_text) > 100 else 0.2)
 
         if hide_keyboard:
             try:
