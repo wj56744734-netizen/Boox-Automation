@@ -1289,11 +1289,13 @@ class Operation_method(Base_note_class):
 
         input_box = self.check_timeout(locator_type, locator_value)
         self._clear_input(input_box)
-        if hasattr(input_box, 'set_text'):
+        # set_text 对超长文本（>100字符）存在截断问题，此时走 send_keys 逐字输入
+        _use_set_text = hasattr(input_box, 'set_text') and len(input_text) <= 100
+        if _use_set_text:
             input_box.set_text(input_text)
         else:
             input_box.send_keys(input_text)
-        self._settle_ui(0.2)
+        self._settle_ui(0.5 if len(input_text) > 100 else 0.2)
 
         # 验证输入内容是否正确写入
         try:
@@ -1304,7 +1306,7 @@ class Operation_method(Base_note_class):
             logging.debug(f"输入验证失败: 期望='{input_text}' 实际='{actual}'，重试")
             self._clear_input(input_box)
             input_box.send_keys(input_text)
-            self._settle_ui(0.2)
+            self._settle_ui(0.5 if len(input_text) > 100 else 0.2)
 
         if hide_keyboard:
             try:
