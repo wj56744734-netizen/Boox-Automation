@@ -144,17 +144,11 @@ def _resolve_case_elements(cases: list[ParsedCase]) -> list[ParsedCase]:
                     f"当前 B 列已有: {', '.join(index_keys) if index_keys else '(空)'}"
                 )
 
-    # 收集阶段输出预期结果加载摘要
+    # 收集阶段输出预期结果加载摘要（仅跳过详情，汇总见模块级日志）
     diag = _loader.get_expected_diagnostics()
-    total = diag.get("total_results", 0)
-    skipped = diag.get("skipped", [])
-    if total or skipped:
-        found_str = '、'.join(diag.get("sheets_found", [])) or "无"
-        logger.info(
-            f"预期结果: 有效 {total} 条，跳过 {len(skipped)} 条"
-            f"（工作表: {found_str}）"
-        )
-        for s in skipped:
+    skipped_list = diag.get("skipped", [])
+    if skipped_list:
+        for s in skipped_list:
             logger.warning(
                 f"  ↳ 跳过 第{s['row']}行【{s['key']}】: {s['reason']}"
             )
@@ -325,9 +319,19 @@ set_cases(_all_cases)
 _executable = [c for c in _all_cases if any(s.element_key for s in c.steps)]
 _executable.sort(key=lambda c: (_PRIORITY_ORDER.get(c.priority, 99), c.row_number))
 _skipped = len(_all_cases) - len(_executable)
+
+# 收集完成：输出汇总（用例 + 元素 + 预期结果）
+from boox_automation.engine.elements import get_element_loader as _get_loader_for_summary
+_summary_loader = _get_loader_for_summary()
+_elem_count = len(_summary_loader)
+_er_diag = _summary_loader.get_expected_diagnostics()
+_er_total = _er_diag.get("total_results", 0)
+_er_skipped = len(_er_diag.get("skipped", []))
 logger.info(
-    "── 收集完成: %d 条用例（%d 可执行, %d 跳过）──",
+    "── 收集完成: %d 条用例（%d 可执行, %d 跳过）| "
+    "元素 %d 个 | 预期结果 %d 条（跳过 %d 条）──",
     len(_all_cases), len(_executable), _skipped,
+    _elem_count, _er_total, _er_skipped,
 )
 
 # 无可执行用例时，pytest parametrize 空列表会产生 NOTSET 占位符
