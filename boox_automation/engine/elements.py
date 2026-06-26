@@ -360,6 +360,7 @@ class ElementLoader:
         self._expected_modules: list[str] = []
         self._expected_sheets_found: list[str] = []
         self._expected_sheets_missing: list[str] = []
+        self._skipped_expected: list[dict] = []  # 校验被跳过的条目明细
         self._loaded = False
         self._load_lock = __import__('threading').Lock()
 
@@ -622,6 +623,7 @@ class ElementLoader:
         self._expected_modules = modules
         self._expected_sheets_found = []
         self._expected_sheets_missing = []
+        self._skipped_expected = []
 
         all_sheets = list_sheet_names(token)
         logger.debug(
@@ -651,7 +653,7 @@ class ElementLoader:
                     f"请确认该工作表中已填入预期结果定义（至少需要表头行 + 1 行数据）"
                 )
                 continue
-            self._parse_expected_rows(rows)
+            self._parse_expected_rows(rows, sheet_name)
             self._expected_sheets_found.append(sheet_name)
             logger.debug(
                 f"已解析预期结果工作表「{sheet_name}」: "
@@ -659,14 +661,20 @@ class ElementLoader:
             )
 
         loaded = len(self._expected_results) - total_before
-        if loaded:
-            found_str = '、'.join(self._expected_sheets_found)
+        skipped = len(self._skipped_expected)
+        if loaded or skipped:
+            found_str = '、'.join(self._expected_sheets_found) if self._expected_sheets_found else '无'
             missing_str = '、'.join(self._expected_sheets_missing) if self._expected_sheets_missing else '无'
-            logger.debug(
-                f"飞书预期结果加载完成: 共 {loaded} 个定义"
+            logger.info(
+                f"飞书预期结果加载完成: 有效 {loaded} 条，跳过 {skipped} 条"
                 f"（找到工作表: {found_str}"
                 f"；缺失工作表: {missing_str}）"
             )
+            if skipped:
+                for s in self._skipped_expected:
+                    logger.warning(
+                        f"  ↳ 跳过 第{s['row']}行【{s['key']}】: {s['reason']}"
+                    )
         elif self._expected_sheets_found:
             found_str = '、'.join(self._expected_sheets_found)
             logger.warning(
@@ -727,6 +735,7 @@ class ElementLoader:
         self._expected_modules = modules
         self._expected_sheets_found = []
         self._expected_sheets_missing = []
+        self._skipped_expected = []
 
         logger.debug(
             f"本地元素表共有 {len(wb.sheetnames)} 个工作表: "
@@ -752,7 +761,7 @@ class ElementLoader:
             rows = []
             for row in ws.iter_rows(min_row=1, values_only=True):
                 rows.append([str(v) if v is not None else "" for v in row])
-            self._parse_expected_rows(rows)
+            self._parse_expected_rows(rows, sheet_name)
             self._expected_sheets_found.append(sheet_name)
             logger.debug(
                 f"已解析预期结果工作表「{sheet_name}」: "
@@ -761,12 +770,18 @@ class ElementLoader:
 
         wb.close()
         loaded = len(self._expected_results) - total_before
-        if loaded:
-            found_str = '、'.join(self._expected_sheets_found)
+        skipped = len(self._skipped_expected)
+        if loaded or skipped:
+            found_str = '、'.join(self._expected_sheets_found) if self._expected_sheets_found else '无'
             logger.info(
-                f"已从本地 Excel 加载 {loaded} 个预期结果定义 "
+                f"本地预期结果加载完成: 有效 {loaded} 条，跳过 {skipped} 条"
                 f"（工作表: {found_str}）"
             )
+            if skipped:
+                for s in self._skipped_expected:
+                    logger.warning(
+                        f"  ↳ 跳过 第{s['row']}行【{s['key']}】: {s['reason']}"
+                    )
         elif self._expected_sheets_found:
             found_str = '、'.join(self._expected_sheets_found)
             logger.warning(
@@ -867,7 +882,7 @@ class ElementLoader:
 
         logger.debug(f"已加载 {count} 条 ADB 命令定义")
 
-    def _parse_expected_rows(self, rows: list[list[str]]):
+    def _parse_expected_rows(self, rows: list[list[str]], sheet_name: str = ""):
         """解析预期结果 sheet 行数据（6 列）。
 
         列结构: 模块 | 匹配文本 | 定位元素 | xml页面 | 操作 | 用途说明
@@ -878,6 +893,7 @@ class ElementLoader:
 
         h_idx = _find_header_row(rows)
         headers = [str(c).strip() for c in rows[h_idx]]
+        sheet_label = f"「{sheet_name}」" if sheet_name else ""
         _EXPECTED_HEADER_MAP = {
             "元素标识": "key",
             "模块": "key",
@@ -923,8 +939,13 @@ class ElementLoader:
             else:
                 key = key_part
 
+            sheet_row = row_idx_0 + h_idx + 2  # 表格行号（1起始）
             if not key:
-                logger.warning(f"预期结果第{row_idx_0 + h_idx + 2}行缺少 key（模块+匹配文本 或 元素标识），跳过")
+                logger.warning(f"预期结果{sheet_label}第{sheet_row}行缺少 key（模块+匹配文本 或 元素标识），跳过")
+                self._skipped_expected.append({
+                    "row": sheet_row, "key": "(无)", "match": match or "(空)",
+                    "reason": "缺少 key（A列模块 或 B列匹配文本 为空）",
+                })
                 continue
 
             # E 列（操作）校验：不允许为空或无效，自动去空白（含内部）
@@ -932,24 +953,41 @@ class ElementLoader:
             action_clean = re.sub(r'\s+', '', action)
             info["action"] = action_clean
             if not action_clean:
-                logger.warning(f"预期结果【{key}】E列（操作）为空，跳过")
+                logger.warning(f"预期结果{sheet_label}【{key}】E列（操作）为空，跳过（第{sheet_row}行）")
+                self._skipped_expected.append({
+                    "row": sheet_row, "key": key, "match": match or "(空)",
+                    "reason": "E列（操作）为空，需填写: 断言存在 / 断言不存在 / 断言toast / 断言toast不出现",
+                })
                 continue
             if action_clean not in _VALID_EXPECTED_ACTIONS:
                 hints = difflib.get_close_matches(action_clean, _VALID_EXPECTED_ACTIONS, n=3, cutoff=0.3)
                 hint_text = f"，是否想填: {hints}" if hints else ""
                 logger.warning(
-                    f"E列无效值'{action_clean}'，有效值: {sorted(_VALID_EXPECTED_ACTIONS)}{hint_text}，跳过")
+                    f"预期结果{sheet_label}【{key}】E列无效值'{action_clean}'，"
+                    f"有效值: {sorted(_VALID_EXPECTED_ACTIONS)}{hint_text}，跳过（第{sheet_row}行）")
+                self._skipped_expected.append({
+                    "row": sheet_row, "key": key, "match": match or "(空)",
+                    "reason": f"E列值无效: '{action_clean}'，有效值: {sorted(_VALID_EXPECTED_ACTIONS)}",
+                })
                 continue
 
             # toast 模式：不需要 C/D 列，match 用于 toast 文本
             if action_clean in ("断言toast", "断言toast不出现"):
                 if not match:
-                    logger.warning(f"预期结果【{key}】E列为'{action_clean}'但B列（匹配文本）为空，跳过")
+                    logger.warning(f"预期结果{sheet_label}【{key}】E列为'{action_clean}'但B列（匹配文本）为空，跳过（第{sheet_row}行）")
+                    self._skipped_expected.append({
+                        "row": sheet_row, "key": key, "match": "(空)",
+                        "reason": f"E列为'{action_clean}'但B列（匹配文本）为空",
+                    })
                     continue
             else:
                 # visible / not_visible 模式：C/D 列至少有一个
                 if not info.get("content") and not info.get("element_checks"):
-                    logger.warning(f"预期结果【{key}】页面XML和检查元素均为空，跳过")
+                    logger.warning(f"预期结果{sheet_label}【{key}】页面XML和检查元素均为空，跳过（第{sheet_row}行）")
+                    self._skipped_expected.append({
+                        "row": sheet_row, "key": key, "match": match or "(空)",
+                        "reason": "C列（定位元素）和 D列（xml页面）均为空，非toast模式下需至少填写一项",
+                    })
                     continue
 
             self._expected_results[key] = info
@@ -969,10 +1007,24 @@ class ElementLoader:
         self._ensure_loaded()
         result = self._expected_match_index.get(tag, "")
         if not result:
+            # 检查是否在跳过列表中
+            skipped_match = None
+            for s in self._skipped_expected:
+                if s.get("match") == tag:
+                    skipped_match = s
+                    break
+            skip_hint = ""
+            if skipped_match:
+                skip_hint = (
+                    f" 注意: 存在一条匹配文本为「{tag}」的条目，"
+                    f"但因「{skipped_match['reason']}」在第{skipped_match['row']}行被跳过，"
+                    f"未进入有效索引。"
+                )
             logger.debug(
                 f"预期结果匹配失败: 匹配文本「{tag}」未在索引中找到。"
                 f"当前索引共 {len(self._expected_match_index)} 条: "
                 f"{', '.join(sorted(self._expected_match_index.keys())) if self._expected_match_index else '(空)'}"
+                f"{skip_hint}"
             )
         return result
 
@@ -985,6 +1037,7 @@ class ElementLoader:
             "sheets_missing": self._expected_sheets_missing,
             "match_index": dict(self._expected_match_index),
             "total_results": len(self._expected_results),
+            "skipped": list(self._skipped_expected),
         }
 
     # 中文表头 → 英文内部 key 映射（兼容新旧两种表头）

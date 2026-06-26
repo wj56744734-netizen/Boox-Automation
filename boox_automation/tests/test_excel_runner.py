@@ -519,6 +519,7 @@ def _check_expected_by_tag(method, expected_by_tag: dict, consumed: dict, step, 
         found = diag.get("sheets_found", [])
         match_index = diag.get("match_index", {})
         total = diag.get("total_results", 0)
+        skipped = diag.get("skipped", [])
 
         searched = [f"预期结果【{m}】" for m in modules] if modules else ["(未搜索任何模块)"]
         module_hint = (modules[1] if len(modules) > 1 else (modules[0] if modules else "模块名"))
@@ -531,7 +532,7 @@ def _check_expected_by_tag(method, expected_by_tag: dict, consumed: dict, step, 
         else:
             raise AssertionError(
                 f"步骤{step.seq}：检查【{tag}】已关联到用例I列，但在预期结果工作表的 B 列中未找到匹配。\n"
-                + expected_tag_not_matched(tag, found, total, match_index, module_hint)
+                + expected_tag_not_matched(tag, found, total, match_index, module_hint, skipped)
             )
 
     try:
