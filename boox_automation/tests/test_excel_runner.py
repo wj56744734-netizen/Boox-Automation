@@ -618,7 +618,7 @@ def _dispatch_expected_page(method, ep) -> None:
     from boox_automation.engine.elements import (
         get_element_loader, _resolve_device_content,
         _load_expected_from_file, _check_elements_by_xpath,
-        _EXPECTED_ACTION_MAP,
+        _check_checked_state, _EXPECTED_ACTION_MAP,
     )
     from boox_automation.engine.xml_checker import XmlChecker
     from boox_automation.driver import driver
@@ -651,6 +651,27 @@ def _dispatch_expected_page(method, ep) -> None:
             raise AssertionError(
                 f"步骤{ep.step_seq}：预期结果【{ep.tag}】Toast不应出现'{toast_text}'但已检测到")
         ep.status = 'pass'
+        return
+
+    # checked / unchecked 模式：走 D 列 XPath 读取元素 checked 属性
+    if check_mode in ('checked', 'unchecked'):
+        element_checks = page_info.get("element_checks", "")
+        if not element_checks:
+            raise AssertionError(
+                f"步骤{ep.step_seq}：预期结果【{ep.tag}】E列为'{action}'，"
+                f"但D列（定位元素）为空。选中状态检查需提供元素定位元素。"
+            )
+        device_info = _get_device_info_safe()
+        checks_content = _resolve_device_content(
+            element_checks, device_info, key=ep.expected_key)
+        if not checks_content:
+            raise AssertionError(
+                f"步骤{ep.step_seq}：预期结果【{ep.tag}】D列"
+                f"无匹配当前设备的内容，无法执行选中状态检查。"
+            )
+        _check_checked_state(checks_content, mode=check_mode,
+                             expected_key=ep.expected_key, step_seq=ep.step_seq)
+        ep.status = "pass"
         return
 
     device_info = _get_device_info_safe()
@@ -716,10 +737,19 @@ def _dispatch_expected_page(method, ep) -> None:
             f"({result.matched_count}/{result.expected_count}):\n{result.summary()}"
         )
         raise AssertionError(result.summary())
-    logger.debug(
-        f"预期结果【{ep.expected_key}】（步骤{ep.step_seq}）XML检查通过 "
-        f"({result.matched_count}/{result.expected_count})"
-    )
+    if result.mode == 'not_visible':
+        lines = [f"预期结果【{ep.expected_key}】（步骤{ep.step_seq}）XML检查通过 (0/{result.expected_count}):"]
+        for sig in result.expected:
+            lines.append(f"  ↳ ✓ 不存在: {sig.to_human()}")
+        logger.debug("\n".join(lines))
+    else:
+        lines = [f"预期结果【{ep.expected_key}】（步骤{ep.step_seq}）XML检查通过 ({result.matched_count}/{result.expected_count}):"]
+        for sig in result.matched:
+            lines.append(f"  ↳ ✓ 存在: {sig.to_human()}")
+        for d in result.text_diffs:
+            lines.append(f"  ↳  文本变更(INFO): {d['element']}")
+            lines.append(f"                预期={d['expected']!r} 实际={d['actual']!r}")
+        logger.debug("\n".join(lines))
 
 
 if __name__ == "__main__":

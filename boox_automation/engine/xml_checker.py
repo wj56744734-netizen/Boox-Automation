@@ -96,6 +96,8 @@ class CompareResult:
     matched_count: int
     missing: list[ElementSignature] = field(default_factory=list)
     extra: list[ElementSignature] = field(default_factory=list)
+    expected: list[ElementSignature] = field(default_factory=list)
+    matched: list[ElementSignature] = field(default_factory=list)
     text_diffs: list[dict] = field(default_factory=list)
     mode: str = 'visible'  # visible / not_visible
 
@@ -159,6 +161,8 @@ class XmlChecker:
                 expected_count=len(expected_sigs),
                 actual_count=len(actual_sigs),
                 matched_count=len(matched_expected),
+                expected=sorted(expected_sigs, key=lambda s: s.to_human()),
+                matched=sorted(matched_expected, key=lambda s: s.to_human()),
                 extra=still_present,
                 mode='not_visible',
             )
@@ -184,6 +188,8 @@ class XmlChecker:
             expected_count=len(expected_sigs),
             actual_count=len(actual_sigs),
             matched_count=len(matched_expected),
+            expected=sorted(expected_sigs, key=lambda s: s.to_human()),
+            matched=sorted(matched_expected, key=lambda s: s.to_human()),
             missing=missing_list,
             text_diffs=text_diffs,
             mode='visible',

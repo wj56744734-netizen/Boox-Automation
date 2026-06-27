@@ -73,6 +73,8 @@ _EXPECTED_ACTION_MAP = {
     "断言不存在": "not_visible",
     "断言toast": "toast",
     "断言toast不出现": "toast_not",
+    "断言选中": "checked",
+    "断言未选中": "unchecked",
 }
 
 _VALID_EXPECTED_ACTIONS = set(_EXPECTED_ACTION_MAP.keys())
@@ -327,6 +329,108 @@ def _check_elements_by_xpath(xpath_text: str, mode: str,
             logger.info("\n".join(lines))
             raise AssertionError(lines[0])
         logger.debug("\n".join(lines))
+
+
+def _check_checked_state(xpath_text: str, mode: str,
+                         expected_key: str = "", step_seq: int = 0) -> None:
+    """检查元素 checked/selected 属性，用于复选框/单选框选中状态断言。
+
+    同时读取 checked 和 selected 属性，任一为 true 即视为选中（兼容
+    CheckBox/Switch 用 checked、ImageView/自定义控件用 selected 的不同情况）。
+
+    Args:
+        xpath_text: D列 XPath（已通过 _resolve_device_content 解析）
+        mode: 'checked' = 期望选中
+              'unchecked' = 期望未选中
+    """
+    from selenium.webdriver.common.by import By
+    from selenium.common.exceptions import TimeoutException
+    from boox_automation.driver import driver
+    from boox_automation.core.config import timeout_default
+
+    raw_lines = [line.strip() for line in xpath_text.split('\n') if line.strip()]
+    if not raw_lines:
+        raise ValueError("检查元素为空")
+
+    items = []  # [(xpath, expected_text)]
+    for line in raw_lines:
+        in_quote = False
+        quote_char = ''
+        xpath_end = len(line)
+        for i, ch in enumerate(line):
+            if ch in ('"', "'") and (in_quote is False or ch == quote_char):
+                in_quote = not in_quote
+                if in_quote:
+                    quote_char = ch
+                else:
+                    quote_char = ''
+                continue
+            if not in_quote and ('一' <= ch <= '鿿' or ch in (',', '，')):
+                xpath_end = i
+                break
+
+        xpath = line[:xpath_end].rstrip(' ,，;；')
+        if not (xpath.startswith('/') or xpath.startswith('(')):
+            ctx = f"预期结果【{expected_key}】（步骤{step_seq}）" if expected_key else "选中状态检查"
+            raise ValueError(f"{ctx}D列不是有效 XPath: {xpath[:80]}")
+
+        expected_text = ""
+        if xpath_end < len(line):
+            tail = line[xpath_end:].lstrip(' ,，;；')
+            if tail:
+                expected_text = tail.replace("\\n", "\n")
+
+        items.append((xpath, expected_text))
+
+    check_timeout = timeout_default()
+    ctx = f"预期结果【{expected_key}】（步骤{step_seq}）" if expected_key else "选中状态检查"
+    expected_label = "选中" if mode == 'checked' else "未选中"
+
+    failures = []
+    ok_items = []  # [(xpath, state_label, expected_text)]
+    for xpath, expected_text in items:
+        try:
+            el = WebDriverWait(driver, check_timeout).until(
+                EC.presence_of_element_located((By.XPATH, xpath)))
+        except TimeoutException:
+            failures.append(f"  ↳ ✗ 未找到: {xpath}")
+            continue
+
+        # 文本校验（可选）
+        if expected_text:
+            actual_text = (el.text or "").strip()
+            if actual_text != expected_text:
+                failures.append(
+                    f"  ↳ ✗ 文本不符: {xpath} "
+                    f"期望={expected_text!r} 实际={actual_text!r}")
+                continue
+
+        # checked / selected 属性检查（任一为 true 即视为选中，兼容不同控件类型）
+        checked_val = el.get_attribute('checked')
+        selected_val = el.get_attribute('selected')
+        is_checked = (checked_val or '').lower() == 'true' or (selected_val or '').lower() == 'true'
+
+        if mode == 'checked' and not is_checked:
+            failures.append(
+                f"  ↳ ✗ 未选中: {xpath} checked={checked_val!r} selected={selected_val!r}")
+        elif mode == 'unchecked' and is_checked:
+            failures.append(
+                f"  ↳ ✗ 仍选中: {xpath} checked={checked_val!r} selected={selected_val!r}")
+        else:
+            state = "已选中" if is_checked else "未选中"
+            ok_items.append((xpath, state, expected_text))
+
+    if failures:
+        lines = [f"{ctx}检查失败 (期望{expected_label}):"]
+        lines.extend(failures)
+        logger.info("\n".join(lines))
+        raise AssertionError(lines[0])
+
+    lines = [f"{ctx}检查通过 (全部{expected_label}, {len(items)}个):"]
+    for xpath, state, extra_text in ok_items:
+        detail = f"  文本: {extra_text!r}" if extra_text else ""
+        lines.append(f"  ↳ ✓ {state}: {xpath}{detail}")
+    logger.debug("\n".join(lines))
 
 
 _ELEMENT_LOADER_INSTANCE = None

@@ -1,4 +1,5 @@
 """预期结果匹配失败的诊断信息模板。"""
+from __future__ import annotations
 
 
 def expected_sheet_not_found(searched: list[str], module_hint: str) -> str:
