@@ -17,7 +17,7 @@ import requests
 from boox_automation.core.config import (
     feishu_app_id, feishu_app_secret,
     feishu_curl_timeout, feishu_token_cache_ttl,
-    cache_max_age, cache_dir,
+    cache_max_age,
 )
 
 logger = logging.getLogger(__name__)
@@ -157,75 +157,121 @@ def read_sheet_by_name(
     return rows
 
 
-def write_sheet_values(
-    spreadsheet_token: str,
-    sheet_id: str,
-    start_row: int,
-    start_col: int,
-    values: list[list[str]],
-) -> dict:
-    """向飞书电子表格写入数据。
+def read_sheet_with_media(
+    sheet_name: str, spreadsheet_token: str
+) -> list[list]:
+    """读取 sheet 时保留嵌入图片 fileToken（不展平为字符串）。
 
-    Args:
-        spreadsheet_token: 表格 token
-        sheet_id: sheet ID (不是 sheet 名)
-        start_row: 起始行 (1-based)
-        start_col: 起始列 (1-based)
-        values: 二维数组，每行一个 list
+    专用于基准图表的加载：图片所在单元格会返回带 fileToken 的 dict/list 结构，
+    交由 extract_file_tokens() 解析；普通文本单元格仍返回字符串。
     """
     if not spreadsheet_token:
         raise RuntimeError("飞书 spreadsheet_token 未配置")
 
-    app_token = _get_tenant_token()
-    write_url = (
-        f"https://open.feishu.cn/open-apis/sheets/v2/spreadsheets/"
-        f"{spreadsheet_token}/values"
-    )
-
-    # 计算结束位置
-    end_row = start_row + len(values) - 1
-    max_cols = max((len(r) for r in values), default=1)
-    end_col = start_col + max_cols - 1
-    col_letter_start = _col_to_letter(start_col)
-    col_letter_end = _col_to_letter(end_col)
-    range_str = f"{sheet_id}!{col_letter_start}{start_row}:{col_letter_end}{end_row}"
-
-    body = {
-        "valueRange": {
-            "range": range_str,
-            "values": values,
-        }
-    }
-    return _feishu_request("PUT", write_url, data=body, bearer_token=app_token)
-
-
-def _col_to_letter(n: int) -> str:
-    """列号转字母 (1->A, 27->AA)。"""
-    result = ""
-    while n > 0:
-        n, remainder = divmod(n - 1, 26)
-        result = chr(65 + remainder) + result
-    return result
-
-
-def get_sheet_id(spreadsheet_token: str, sheet_name: str) -> str:
-    """按名称获取 sheet_id。"""
     sheets = _get_sheet_meta(spreadsheet_token)
+    sheet_id = None
     for s in sheets:
         if s["title"] == sheet_name:
-            return s["sheet_id"]
-    raise RuntimeError(
-        f"Sheet '{sheet_name}' 不存在，可选: "
-        f"{[s['title'] for s in sheets]}"
+            sheet_id = s["sheet_id"]
+            break
+    if not sheet_id:
+        raise RuntimeError(
+            f"Sheet '{sheet_name}' 不存在，可选: "
+            f"{[s['title'] for s in sheets]}"
+        )
+
+    app_token = _get_tenant_token()
+    read_url = (
+        f"https://open.feishu.cn/open-apis/sheets/v2/spreadsheets/"
+        f"{spreadsheet_token}/values/{sheet_id}"
+        f"?valueRenderOption=FormattedValue"
     )
+    read_body = _feishu_request("GET", read_url, bearer_token=app_token)
+    rows = read_body.get("data", {}).get("valueRange", {}).get("values", [])
+
+    if rows:
+        max_cols = max(len(r) for r in rows)
+        for r in rows:
+            r.extend([""] * (max_cols - len(r)))
+
+    logger.debug(f"已从飞书读取工作表「{sheet_name}」(含媒体): {len(rows)} 行")
+    return rows
 
 
-def use_local_excel() -> bool:
-    """检查是否使用本地 Excel 文件（离线调试）。
-    保留以兼容旧代码，新代码请用 excel_source()。
+def extract_file_tokens(cell_value) -> list[str]:
+    """递归提取单元格中所有 fileToken 字段。
+
+    适配飞书 FormattedValue 返回结构：dict/list/JSON 字符串均支持。
     """
-    from boox_automation.core.config import excel_source
-    return excel_source() == "local"
+    tokens: list[str] = []
+    if isinstance(cell_value, dict):
+        ft = cell_value.get("fileToken")
+        if ft:
+            tokens.append(str(ft))
+        for v in cell_value.values():
+            tokens.extend(extract_file_tokens(v))
+    elif isinstance(cell_value, list):
+        for item in cell_value:
+            tokens.extend(extract_file_tokens(item))
+    elif isinstance(cell_value, str):
+        s = cell_value.strip()
+        if s.startswith("{") or s.startswith("["):
+            try:
+                obj = json.loads(s)
+                tokens.extend(extract_file_tokens(obj))
+            except (json.JSONDecodeError, ValueError):
+                pass
+    return tokens
+
+
+_MEDIA_EXT_MAP = {
+    "image/jpeg": ".jpg", "image/jpg": ".jpg",
+    "image/png": ".png", "image/gif": ".gif",
+    "image/webp": ".webp", "image/bmp": ".bmp",
+}
+
+
+def download_media(file_token: str, save_dir: str, filename: str) -> str:
+    """通过 fileToken 下载飞书素材到本地，返回完整路径。
+
+    Args:
+        file_token: 飞书素材 token
+        save_dir: 保存目录（自动创建）
+        filename: 文件名（不含扩展名），扩展名按 Content-Type 自动判断
+    """
+    if not file_token:
+        raise RuntimeError("download_media: file_token 为空")
+
+    app_token = _get_tenant_token()
+    url = (
+        "https://open.feishu.cn/open-apis/drive/v1/medias/"
+        f"batch_get_tmp_download_url?file_tokens={file_token}"
+    )
+    body = _feishu_request("GET", url, bearer_token=app_token)
+    tmp_urls = body.get("data", {}).get("tmp_download_urls", [])
+    if not tmp_urls:
+        raise RuntimeError(f"download_media: 未获取到 {file_token} 的临时下载链接")
+    tmp_url = tmp_urls[0].get("tmp_download_url")
+    if not tmp_url:
+        raise RuntimeError(f"download_media: 临时下载链接为空 token={file_token}")
+
+    try:
+        resp = requests.get(tmp_url, stream=True, timeout=feishu_curl_timeout() * 2)
+        resp.raise_for_status()
+    except requests.RequestException as e:
+        raise RuntimeError(f"download_media: 下载失败 token={file_token}: {e}")
+
+    content_type = (resp.headers.get("Content-Type") or "").split(";")[0].strip()
+    ext = _MEDIA_EXT_MAP.get(content_type, ".png")
+    save_path = Path(save_dir)
+    save_path.mkdir(parents=True, exist_ok=True)
+    full = save_path / f"{filename}{ext}"
+    with open(full, "wb") as f:
+        for chunk in resp.iter_content(chunk_size=8192):
+            if chunk:
+                f.write(chunk)
+    logger.debug(f"飞书素材已下载: {full}")
+    return str(full)
 
 
 # ---- 连通性检查 ----
@@ -253,9 +299,23 @@ def check_feishu_reachable(timeout: int = 3) -> bool:
 # ---- 本地缓存 ----
 
 def _cache_path(cache_name: str) -> Path:
-    """获取缓存文件完整路径。"""
-    base = Path(__file__).parent.parent  # core/ → boox_automation/
-    return base / cache_dir() / f"{cache_name}.json"
+    """获取缓存文件完整路径（统一落在 artifacts/cache/）。"""
+    from boox_automation.core.paths import CACHE_ROOT
+    _maybe_migrate_old_cache(CACHE_ROOT)
+    return CACHE_ROOT / f"{cache_name}.json"
+
+
+def _maybe_migrate_old_cache(target: Path) -> None:
+    """旧缓存目录 data/.cache/ 若存在，迁移至 artifacts/cache/。"""
+    old_cache = Path(__file__).parent.parent / "data" / ".cache"
+    if not old_cache.exists() or target.exists():
+        return
+    import shutil
+    logger.info(f"迁移旧缓存: {old_cache} → {target}")
+    try:
+        shutil.move(str(old_cache), str(target))
+    except Exception as e:
+        logger.warning(f"旧缓存迁移失败: {e}")
 
 
 def save_cache(data: dict, cache_name: str) -> None:
@@ -295,21 +355,6 @@ def load_cache(cache_name: str, max_age_seconds: int | None = None) -> dict | No
         return None
 
 
-def get_cache_age(cache_name: str) -> str:
-    """返回缓存年龄的描述文本（如'2小时前'），无缓存返回空字符串。"""
-    path = _cache_path(cache_name)
-    if not path.exists():
-        return ""
-    try:
-        payload = json.loads(path.read_text(encoding='utf-8'))
-        cached_at_str = payload.get("cached_at", "")
-        if cached_at_str:
-            cached_at = datetime.fromisoformat(cached_at_str)
-            age = (datetime.now(timezone.utc) - cached_at).total_seconds()
-            return _fmt_age(age)
-    except Exception:
-        pass
-    return ""
 
 
 def _fmt_age(seconds: float) -> str:

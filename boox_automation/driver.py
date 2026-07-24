@@ -3,7 +3,7 @@ import subprocess
 import os
 
 from appium import webdriver
-from boox_automation.devices.info import Device_basic_information
+from boox_automation.devices.device_info import Device_basic_information
 from boox_automation.core.health import ensure_appium_server
 from appium.options.android import UiAutomator2Options
 
@@ -96,10 +96,10 @@ def _build_driver_options():
             capture_output=True,
             text=True
         )
-        raise ValueError(f"设备信息【 {result.stdout.strip()} 】获取结果为空，请检查devices/registry.py文件是否包含设备信息")
+        raise ValueError(f"设备信息【 {result.stdout.strip()} 】获取结果为空，请检查devices/registry.py 文件是否包含设备信息")
 
     if not all(key in device_info for key in ['android_version', 'device_name', 'device_id']):
-        raise ValueError("未能正确获取设备信息，请检查devices.info 模块")
+        raise ValueError("未能正确获取设备信息，请检查 devices/device_info 模块")
 
     from boox_automation.core.config import appium_capabilities
 

@@ -173,8 +173,8 @@ def main():
         # 自动生成路径: artifacts/page_xml/YYYY-MM-DD/HHmmss.xml
         today = time.strftime('%Y-%m-%d')
         ts = time.strftime('%H%M%S')
-        base = Path(__file__).resolve().parent.parent  # scripts/ → boox_automation/
-        output_dir = base / 'artifacts' / 'page_xml' / today
+        from boox_automation.core.paths import PAGE_XML_ROOT
+        output_dir = PAGE_XML_ROOT / today
         output_dir.mkdir(parents=True, exist_ok=True)
         output_path = output_dir / f'{ts}.xml'
 

@@ -7,12 +7,20 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+
+_STEP_PREFIX_RE = re.compile(r"^\d+[\.\、]\s*")
+
+def _strip_step_prefix(text: str) -> str:
+    """去掉步骤文本开头的序号前缀（如 '11. '、'12、'），避免与重新编号重复。"""
+    return _STEP_PREFIX_RE.sub("", text).strip()
 
 # ── CSS 模板（静态，与 report_case.html 保持一致） ──
 
@@ -221,17 +229,17 @@ def _build_steps_html(steps: list, expected_pages: list | None = None) -> str:
         seq = i + 1
         if step.status == "fail":
             si = '<span class="si" style="color:var(--red)">✕</span>'
-            stx = f'<span class="stx" style="color:var(--red)">{seq}. {_escape(step.raw)}</span>'
+            stx = f'<span class="stx" style="color:var(--red)">{seq}. {_escape(_strip_step_prefix(step.raw))}</span>'
             sx = f'<span class="sx" style="color:var(--red)">{_escape(step.tag)}</span>'
             parts.append(f'<div class="step err">{si}{stx}{sx}</div>')
         elif step.status == "pass":
             si = '<span class="si" style="color:var(--green)">✓</span>'
-            stx = f'<span class="stx">{seq}. {_escape(step.raw)}</span>'
+            stx = f'<span class="stx">{seq}. {_escape(_strip_step_prefix(step.raw))}</span>'
             sx = f'<span class="sx">{_escape(step.action)}</span>'
             parts.append(f'<div class="step">{si}{stx}{sx}</div>')
         else:
             si = '<span class="si" style="color:var(--text3)">—</span>'
-            stx = f'<span class="stx" style="color:var(--text3)">{seq}. {_escape(step.raw)}</span>'
+            stx = f'<span class="stx" style="color:var(--text3)">{seq}. {_escape(_strip_step_prefix(step.raw))}</span>'
             sx = f'<span class="sx" style="color:var(--text3)">未执行</span>'
             parts.append(f'<div class="step">{si}{stx}{sx}</div>')
     return "\n".join(parts)

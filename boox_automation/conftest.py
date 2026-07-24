@@ -12,7 +12,11 @@ if _project_root not in sys.path:
 # 关键：非 TTY 环境下强制 stdout 行缓冲，实现日志实时输出
 sys.stdout.reconfigure(line_buffering=True)
 
-from boox_automation.devices.info import Device_basic_information
+# 提前配置根 logger，兜底捕获 conftest 导入链中任何模块的 WARNING
+# pytest_configure 会覆盖此配置
+logging.basicConfig(level=logging.WARNING, format="%(asctime)s  %(levelname)-5s  %(message)s", datefmt="%H:%M:%S", force=True)
+
+from boox_automation.devices.device_info import Device_basic_information
 from boox_automation.driver import driver, ensure_driver_alive, init_driver
 from boox_automation.core.health import ensure_adb_device_ready, run_adb_command_with_retry, ensure_device_awake
 import pytest
@@ -23,6 +27,21 @@ from selenium.webdriver.common.by import By
 def _compact_exc_text(exc):
     text = str(exc) if exc is not None else ""
     return text.split("Stacktrace:")[0].strip().replace("\n", " ")
+
+
+def dismiss_floating_ball(device_id: str) -> None:
+    """尝试关闭系统悬浮球，避免遮挡 UI 操作及干扰截图对比。"""
+    if not device_id:
+        return
+    cmds = [
+        f"adb -s {device_id} shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS",
+        f"adb -s {device_id} shell input keyevent 111",  # KEYCODE_ESCAPE
+    ]
+    for cmd in cmds:
+        try:
+            run_adb_command_with_retry(cmd, retries=1)
+        except Exception:
+            pass
 
 
 # --------------------- 用例过滤工具 ---------------------
@@ -87,12 +106,10 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "cleanup_app_data: 测试前清理应用数据（pm clear）")
     config.addinivalue_line("markers", "cleanup_storage_files: 测试前清理存储文件（rm -rf）")
 
-    # 配置日志级别（由 pytest.ini 的 log_cli 统一管理输出）
-    # NOTE_LOG_LEVEL 环境变量可覆盖（调试时设为 DEBUG）
-    log_level = os.getenv("NOTE_LOG_LEVEL", "INFO").upper()
+    # 先提高到 ERROR，阻止模块导入阶段的 WARNING/INFO 噪音
+    # sessionstart 时再降到目标级别
     root_logger = logging.getLogger()
-    root_logger.setLevel(getattr(logging, log_level, logging.INFO))
-    # 清除已有的 handler（避免重复输出），加 NullHandler 防止 lastResort
+    root_logger.setLevel(logging.ERROR)
     for handler in root_logger.handlers[:]:
         root_logger.removeHandler(handler)
     root_logger.addHandler(logging.NullHandler())
@@ -164,12 +181,18 @@ def _likely_needs_device(session):
 
 
 _SESSION_START = None
+_SESSION_DEVICE_ID = None
+_SESSION_DEVICES = None
 
 
 def pytest_sessionstart(session):
-    """会话开始：静音第三方日志 + 设备前置检查（无设备时干净退出）。"""
-    global _SESSION_START
+    """会话开始：静音第三方日志 + 设备前置校验（校验失败直接退出，不做 INFO 日志）。"""
+    global _SESSION_START, _SESSION_DEVICE_ID, _SESSION_DEVICES
     _SESSION_START = time.time()
+
+    # 将 root logger 从 ERROR（导入阶段闸门）恢复到目标级别
+    _log_level = getattr(logging, os.getenv("NOTE_LOG_LEVEL", "INFO").upper(), logging.INFO)
+    logging.getLogger().setLevel(_log_level)
 
     logging.getLogger('selenium').setLevel(logging.WARNING)
     logging.getLogger('urllib3').setLevel(logging.ERROR)
@@ -182,27 +205,31 @@ def pytest_sessionstart(session):
     if not _likely_needs_device(session):
         return
     try:
-        devices = Device_basic_information()
-        device_id = devices.get_connected_device_ids()
+        _SESSION_DEVICES = Device_basic_information()
+        _SESSION_DEVICE_ID = _SESSION_DEVICES.get_connected_device_ids()
+        dismiss_floating_ball(_SESSION_DEVICE_ID)
 
-        logging.info("=" * 60)
-        logging.info("  Boox 自动化测试 ")
-        logging.info("=" * 60)
-
-        devices.check_device_language(device_id)
-        devices.get_wifi(device_id)
-
-        # 验证设备型号是否在映射表中注册
-        device_info = devices.get_device_info()
+        # 校验设备型号是否已注册（失败直接 RuntimeError）
+        device_info = _SESSION_DEVICES.get_device_info()
         if device_info is None:
             raise RuntimeError("设备型号未注册，请检查 devices/registry.py 中的 device_list 映射表")
 
-        logging.info("-" * 60)
+        # 校验语言（非中文直接 RuntimeError）
+        _SESSION_DEVICES.check_device_language(_SESSION_DEVICE_ID)
     except RuntimeError as e:
         pytest.exit(
             f"前置检查失败 — {e}",
             returncode=1
         )
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_collection(session):
+    """收集开始前输出设备信息（在 test session starts 横幅之后）。"""
+    global _SESSION_DEVICES, _SESSION_DEVICE_ID
+    if _SESSION_DEVICES is not None and _SESSION_DEVICE_ID is not None:
+        _SESSION_DEVICES.basic_device_information(_SESSION_DEVICE_ID)
+    yield
 
 
 def pytest_sessionfinish(session, exitstatus):
@@ -241,7 +268,7 @@ def _send_feishu_report(session) -> None:
         return
 
     from boox_automation.core.feishu_report import build_report_card, push_report
-    from boox_automation.devices.info import Device_basic_information
+    from boox_automation.devices.device_info import Device_basic_information
     from boox_automation.core.config import test_modules as cfg_test_modules
     from boox_automation.engine.result_store import get_cases
     from boox_automation.core.html_reporter import build_case_report, save_report
@@ -281,8 +308,8 @@ def _send_feishu_report(session) -> None:
                 session_start=_SESSION_START,
                 modules=modules,
             )
-            from boox_automation.core.paths import ARTIFACTS_ROOT
-            report_dir = ARTIFACTS_ROOT / "reports"
+            from boox_automation.core.paths import REPORTS_ROOT
+            report_dir = REPORTS_ROOT
             html_path = save_report(html, report_dir)
             logging.info(f"HTML 测试报告已生成: {html_path}")
         except Exception as e:
@@ -363,6 +390,18 @@ def adb_clean_storage_files(device_id):
     commands = [f'adb -s {device_id} shell rm -rf {path}' for path in paths]
     _run_adb_cleanup_commands(device_id, commands, "清理存储文件")
 
+
+def adb_set_orientation(device_id: str, orientation: str) -> None:
+    """通过 ADB 设置屏幕方向，由前置条件【设置竖屏】/【设置横屏】触发。
+
+    Args:
+        orientation: 'portrait' | 'landscape'
+    """
+    value = "0" if orientation == "portrait" else "1"
+    command = f"adb -s {device_id} shell settings put system user_rotation {value}"
+    _run_adb_cleanup_commands(device_id, [command], "设置屏幕方向")
+    time.sleep(1.5)  # 等待方向切换动画完成
+
 def _extract_major_minor(version: str) -> str:
     """从版本字符串提取主版本号，如 '4.2.1-rel' → '4.2'。"""
     import re
@@ -370,10 +409,9 @@ def _extract_major_minor(version: str) -> str:
     return m.group(0) if m else ""
 
 # --------------------- 测试初始化fixture ---------------------
-DEVICE_INFO_PRINTED = False
-_DRIVER_FAILURE_COUNT = 0
 from boox_automation.core.config import driver_failure_threshold
 _DRIVER_FAILURE_THRESHOLD = driver_failure_threshold()
+_DRIVER_FAILURE_COUNT = 0
 
 
 @pytest.fixture(scope='function', autouse=False)
@@ -400,9 +438,7 @@ def note_test_initial(request):
         device_region = device_info.get('device_region')
         version_info = device_info.get('version_info')
 
-    global DEVICE_INFO_PRINTED
-
-    # 按前置条件或 marker 决定是否清理（默认不清理）
+    # 按前置条件或 marker 决定是否清理
     needs_clean_app_data = False
     needs_clean_storage = False
     case = None
@@ -422,6 +458,14 @@ def note_test_initial(request):
     if needs_clean_storage:
         adb_clean_storage_files(device_id)
 
+    # 屏幕方向设置（在 cleanup 之后、driver 唤醒之前执行）
+    orientation = None
+    if case is not None:
+        from boox_automation.engine.parser import has_orientation
+        orientation = has_orientation(case.preconditions)
+    if orientation:
+        adb_set_orientation(device_id, orientation)
+
     # 确保设备唤醒后再探活 driver
     ensure_device_awake(device_id)
 
@@ -436,10 +480,6 @@ def note_test_initial(request):
                 f"Driver 连续 {_DRIVER_FAILURE_COUNT} 次重建失败，终止测试 session: {_compact_exc_text(e)}"
             )
         pytest.fail(str(e), pytrace=False)
-    if not DEVICE_INFO_PRINTED:
-        """"" 打印设备信息 """""
-        devices.basic_device_information(device_id)
-        DEVICE_INFO_PRINTED = True
 
     # 启动应用
     def press_home_with_recovery(stage):

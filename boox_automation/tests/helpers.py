@@ -4,11 +4,11 @@ from threading import Lock
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.common.by import By
-from boox_automation.ui_ops.operations import Operation_method
-from boox_automation.engine.elements import get_element_loader
+from boox_automation.ui_ops.actions import Operation_method
+from boox_automation.engine.elements import get_elements
 from boox_automation.ui_ops.logcat import Logcat
 from boox_automation.driver import driver
-from boox_automation.devices.info import Device_basic_information
+from boox_automation.devices.device_info import Device_basic_information
 from selenium.common.exceptions import TimeoutException
 from pathlib import Path
 import openpyxl
@@ -51,7 +51,7 @@ class Public_method:
         self._stop_event = Event()
         self._lock = Lock()
         self.driver = driver
-        self.element_loader = get_element_loader()
+        self.elements = get_elements()
         self.logcat = Logcat()
         self.method = Operation_method(self.driver)
 
@@ -76,7 +76,7 @@ class Public_method:
         """进入笔记应用首页"""
 
         devices_info = devices.get_device_info()
-        if device_info:
+        if devices_info:
             devices_reader = devices_info.get('devices_reader')
             if devices_reader == "阅读器":
                 # if device_size == "6":
@@ -380,10 +380,10 @@ class Public_method:
     def enter_storage(self):
         """判断设备类型后执行不同操作，阅读器和平板元素定位方式不一样"""
         devices_info = devices.get_device_info()
-        if device_info:
+        if devices_info:
             devices_reader = devices_info.get('devices_reader')
             if devices_reader == "阅读器":
-                self.method.xpath_text_click(element_key="设备相关.阅读器存储入口")
+                self.method.xpath_text_click(name="存储")
             else:
                 self.method.xpath_parent_click(
                     xpath='(//android.widget.ImageView[@resource-id="com.onyx:id/imageView_cover_border"])[15]')
@@ -393,11 +393,11 @@ class Public_method:
 
         self.enter_storage()
 
-        self.method.by_name_click(element_key="设备相关.存储卷列表")
+        self.method.by_name_click(by_method=By.ID, locator="com.onyx:id/volume_name", name="存储")
 
         self.get_file(f"{file_route_name}", f"{file_route_name2}", f"{file_route_name3}")
 
-        self.method.by_name_click(element_key="通用操作.笔记内-导入确认按钮")
+        self.method.by_name_click(by_method=By.ID, locator="com.onyx.android.note:id/start_import", name="确定")
 
         self.method.by_pop_time(by_method=By.ID, locator="com.onyx.android.note:id/progress", timeout=180, prompt="导入笔记超时")
 
@@ -412,7 +412,7 @@ class Public_method:
             logging.debug(f"找到引导: {element}")
             if element:
                 logging.debug("点击弹窗知道了")
-                self.method.xpath_text_click(element_key="笔记首页.弹窗通用知道了")
+                self.method.xpath_text_click(name="知道了")
         except TimeoutException:
             logging.debug("未出现属性引导弹窗，跳过")
         except Exception as e:

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 import re
 import subprocess
@@ -8,13 +10,6 @@ from boox_automation.devices.registry import device_list
 _CACHED_DEVICE_ID = None
 _Fingerprint_information = None
 _Version_Information = None
-
-# ===== 设备测试文件路径常量 =====
-TEST_FILES_DISPLAY_ROOT = "笔记自动化测试文件"
-TEST_FILES_DIR_NOTE_EXPORT = "固件迭代测试项（笔记导出）"
-TEST_FILES_DIR_NOTE_RENDER = "固件迭代测试项（笔记渲染）"
-# TEST_FILES_DIR_LOCAL_FILE  = "用例测试，从本地文件导入"
-TEST_FILES_DIR_LOCAL_FILE  = "测试书籍"
 
 
 class Device_basic_information:
@@ -66,7 +61,7 @@ class Device_basic_information:
             # 缓存设备ID到模块变量
             _CACHED_DEVICE_ID = device_ids[0]
             if not silent:
-                logging.info(f"设备已连接: {_CACHED_DEVICE_ID}")
+                logging.debug(f"设备已连接: {_CACHED_DEVICE_ID}")
             return _CACHED_DEVICE_ID
         except RuntimeError:
             raise
@@ -172,7 +167,7 @@ class Device_basic_information:
                 else:
                     quality = "一般"
 
-            logging.info(f"Wi-Fi: {ssid} | {ip} | {rssi} dBm ({quality}) | {link_speed}")
+            logging.debug(f"Wi-Fi: {ssid} | {ip} | {rssi} dBm ({quality}) | {link_speed}")
 
             return {
                 "connected": True,
@@ -199,7 +194,6 @@ class Device_basic_information:
             raise RuntimeError(
                 f"设备语言非中文（当前: {locale}），请先将设备语言切换为中文后再运行测试"
             )
-        logging.info(f"语言检查: {locale} ✓")
         return locale
 
     def get_device_memory_info(self,device_id):
@@ -211,16 +205,23 @@ class Device_basic_information:
         )
         output = result.stdout
 
-        mem_total = re.search(r'MemTotal:\s+(\d+)', output).group(1) if re.search(r'MemTotal:\s+(\d+)', output) else "未知"
-        mem_free = re.search(r'MemFree:\s+(\d+)', output).group(1) if re.search(r'MemFree:\s+(\d+)', output) else "未知"
-        mem_available = re.search(r'MemAvailable:\s+(\d+)', output).group(1) if re.search(r'MemAvailable:\s+(\d+)',
-                                                                                          output) else "未知"
+        mem_total_m = re.search(r'MemTotal:\s+(\d+)', output)
+        mem_total = mem_total_m.group(1) if mem_total_m else "未知"
+        mem_free_m = re.search(r'MemFree:\s+(\d+)', output)
+        mem_free = mem_free_m.group(1) if mem_free_m else "未知"
+        mem_available_m = re.search(r'MemAvailable:\s+(\d+)', output)
+        mem_available = mem_available_m.group(1) if mem_available_m else "未知"
 
         mem_total_mb = round(int(mem_total) / (1024 * 1024), 2) if mem_total else 0
         mem_free_mb = round(int(mem_free) / (1024 * 1024), 2) if mem_free != "未知" else "未知"
         mem_available_mb = round(int(mem_available) / (1024 * 1024), 2) if mem_available != "未知" else "未知"
 
-        logging.info(f"  内存: 总 {mem_total_mb}GB / 可用 {mem_available_mb}GB")
+        mem_used_mb = round(mem_total_mb - mem_available_mb, 2) if mem_total and mem_available != "未知" else None
+        mem_used_pct = round((mem_used_mb / mem_total_mb) * 100) if mem_used_mb is not None else None
+        mem_str = f"总 {mem_total_mb}GB / 可用 {mem_available_mb}GB"
+        if mem_used_pct is not None:
+            mem_str += f" ({mem_used_pct}%已用)"
+        logging.info(f"      内存: {mem_str}")
 
         return {"total": f"{mem_total_mb} MB", "free": f"{mem_free_mb} MB", "available": f"{mem_available_mb} MB"}
 
@@ -236,7 +237,7 @@ class Device_basic_information:
         if len(output.strip().split('\n')) > 1:
             parts = output.strip().split('\n')[1].split()
             total, used, available, percent = parts[1], parts[2], parts[3], parts[4]
-            logging.info(f"  存储: 总 {total}B / 可用 {available}B ({percent}已用)")
+            logging.info(f"      存储: 总 {total}B / 可用 {available}B ({percent}已用)")
             return {"total": total, "used": used, "available": available, "percent_used": percent}
         logging.error("无法获取存储信息")
         return {"error": "无法获取存储信息"}
@@ -256,8 +257,28 @@ class Device_basic_information:
             logging.warning(f"获取设备分辨率失败: {e}")
             return "未知"
 
-    def parse_fingerprint(self,fingerprint):
-        """"" 解析指纹信息 """""
+    def get_device_dpi(self, device_id):
+        """获取设备 DPI，优先 Override density，否则 Physical density。"""
+        try:
+            result = subprocess.run(
+                ['adb', '-s', device_id, 'shell', 'wm', 'density'],
+                capture_output=True, text=True, check=True,
+            )
+            output = result.stdout.strip()
+            m = re.search(r'Override density:\s*(\d+)', output)
+            if m:
+                return int(m.group(1))
+            m = re.search(r'Physical density:\s*(\d+)', output)
+            if m:
+                return int(m.group(1))
+            logging.debug(f"wm density 输出无法解析: {output!r}")
+            return None
+        except Exception as e:
+            logging.warning(f"获取设备 DPI 失败: {e}")
+            return None
+
+    def parse_fingerprint(self, fingerprint: str) -> tuple:
+        """解析 Android 构建指纹，返回 (设备名, 构建日期, 版本号, 构建类型, 完整构建时间)。"""
         try:
             parts = fingerprint.split(':')
             if len(parts) < 3:
@@ -284,8 +305,8 @@ class Device_basic_information:
             logging.error(f"解析指纹信息失败: {e}")
             return None, None, None, None
 
-    def match_device_info(self,devices_name):
-        """"" 在设备列表中匹配设备信息 """""
+    def match_device_info(self, devices_name: str) -> dict | None:
+        """在设备型号注册表中匹配设备信息，返回标准化字段字典，未匹配返回 None。"""
         if devices_name is None:
             return None
 
@@ -298,7 +319,7 @@ class Device_basic_information:
                 missing.append("platform (平台: 662/855/6225/6350/6690)")
             if missing:
                 raise RuntimeError(
-                    f"设备型号 {devices_name} 在 devices/models/ 中缺少关键字段: "
+                    f"设备型号 {devices_name} 在 devices/device_models/ 中缺少关键字段: "
                     f"{', '.join(missing)}。请补充后再运行测试。"
                 )
             return {
@@ -313,28 +334,31 @@ class Device_basic_information:
         return None
 
     def get_device_info(self):
-
-        """"" 获取连接的Android设备信息 """""
+        """获取当前连接设备的完整信息字典。"""
+        # 获取设备 ID
         device_id = self.get_connected_device_ids()
 
-        """"" 获取Android版本 """""
+        # 获取 Android 版本
         android_version = self.get_android_version(device_id)
 
-        """"" 获取设备指纹 """""
+        # 获取设备指纹
         fingerprint = self.get_device_fingerprint(device_id)
         if not fingerprint:
             return None
 
-        """"" 解析指纹信息 """""
-        devices_name, build_date, version_info, build_type , build_date_time = self.parse_fingerprint(fingerprint)
+        # 解析指纹信息
+        devices_name, build_date, version_info, build_type, build_date_time = self.parse_fingerprint(fingerprint)
 
         # 匹配设备信息
         device_match = self.match_device_info(devices_name)
         if not device_match:
             return None
 
-        """"" 获取设备分辨率 """""
+        # 获取设备分辨率
         resolution = self.get_device_resolution(device_id)
+
+        # 获取设备 DPI
+        device_dpi = self.get_device_dpi(device_id)
 
         # 构建设备信息字典
         return {
@@ -345,28 +369,44 @@ class Device_basic_information:
             "version_info": version_info,
             "build_type": build_type,
             "filtered_size": resolution,
-            "build_date_time":build_date_time
+            "device_dpi": device_dpi,
+            "build_date_time": build_date_time
         }
 
-    def basic_device_information(self,device_id):
-        """打印设备基础信息"""
+    def basic_device_information(self, device_id):
+        """打印设备基础信息（语言、Wi-Fi、内存、存储等全部前置检查）"""
         device_info = self.get_device_info()
-        if device_info:
-            logging.info("-" * 40)
-            logging.info(
-                f"设备: {device_info.get('device_name')} | "
-                f"{device_info.get('device_size')}寸{device_info.get('driver_colour')} | "
-                f"{device_info.get('version_info')} | "
-                f"{device_info.get('device_region')}"
-            )
-            logging.info(
-                f"      分辨率 {device_info.get('filtered_size')} | "
-                f"平台 {device_info.get('device_platform')} | "
-                f"类型 {device_info.get('devices_reader')} | "
-                f"构建 {device_info.get('build_type')}"
-            )
-            logging.info(f"      系统: {device_info.get('build_date_time')}")
+        if not device_info:
+            return
 
-            self.get_device_memory_info(device_id)
-            self.get_device_storage_info(device_id)
-            logging.info("-" * 40)
+        logging.info("-" * 40)
+        logging.info(
+            f"设备: {device_info.get('device_name')} | "
+            f"{device_info.get('device_size')}寸{device_info.get('driver_colour')} | "
+            f"{device_info.get('version_info')} | "
+            f"{device_info.get('device_region')}"
+        )
+        logging.info(
+            f"分辨率: {device_info.get('filtered_size')} | "
+            f"平台: {device_info.get('device_platform')} | "
+            f"类型: {device_info.get('devices_reader')} | "
+            f"构建: {device_info.get('build_type')}"
+        )
+        logging.info(f"DPI: {device_info.get('device_dpi')}")
+        logging.info(f"系统: {device_info.get('build_date_time')}")
+
+        self.get_device_memory_info(device_id)
+        self.get_device_storage_info(device_id)
+
+        # Wi-Fi（精简：仅 SSID + 信号）
+        wifi = self.get_wifi(device_id)
+        if wifi.get("connected"):
+            rssi = wifi.get("rssi", "未知")
+            quality = "优秀" if int(rssi) >= -50 else "良好" if int(rssi) >= -70 else "一般" if rssi != "未知" else "未知"
+            logging.info(f"Wi-Fi: {wifi.get('ssid', '?')} | {rssi} dBm ({quality})")
+
+        # 语言检查
+        locale = self.check_device_language(device_id)
+        logging.info(f"语言检查: {locale} ✓")
+
+        logging.info("-" * 40)

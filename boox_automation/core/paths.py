@@ -6,9 +6,15 @@ NOTE_ARTIFACTS_ROOT 改写到外部目录（CI 场景常用）。
 
 目录约定：
 
-- artifacts/screenshots/<YYYY-MM-DD>/     失败截图等运行期截图
-- artifacts/logs/                         备用：测试日志
-- artifacts/tmp/                          临时下载、中间文件
+- artifacts/screenshots/<YYYY-MM-DD>/     失败截图等运行期截图（12h 清理）
+- artifacts/image_diff/{设备}/{模块}/      截图对比产物（12h 清理）
+- artifacts/reports/                       HTML 测试报告（12h 清理）
+- artifacts/page_xml/<YYYY-MM-DD>/         页面 XML 导出（12h 清理）
+- artifacts/cache/                         飞书数据缓存（24h 清理）
+- artifacts/baselines/                     基准图缓存（24h 清理）
+- artifacts/logs/                          测试日志（12h 清理）
+- artifacts/tmp/                           临时文件（12h 清理）
+- artifacts/docs/                          开发方案文档（12h 清理，不入库）
 """
 
 from __future__ import annotations
@@ -29,20 +35,26 @@ def get_artifacts_root() -> Path:
 
 ARTIFACTS_ROOT = get_artifacts_root()
 
+# ── 产物目录 ──
 SCREENSHOTS_ROOT = ARTIFACTS_ROOT / "screenshots"
+IMAGE_DIFF_ROOT = ARTIFACTS_ROOT / "image_diff"
+REPORTS_ROOT = ARTIFACTS_ROOT / "reports"
+PAGE_XML_ROOT = ARTIFACTS_ROOT / "page_xml"
+CACHE_ROOT = ARTIFACTS_ROOT / "cache"
+BASELINES_ROOT = ARTIFACTS_ROOT / "baselines"
 LOGS_ROOT = ARTIFACTS_ROOT / "logs"
 TMP_ROOT = ARTIFACTS_ROOT / "tmp"
+DOCS_ROOT = ARTIFACTS_ROOT / "docs"
 
-# 每个分类下保留多少最新批次（清理时使用）
-from boox_automation.core.config import cleanup_keep_latest
-DEFAULT_KEEP_LATEST = cleanup_keep_latest()
+# ── 清理 TTL（秒）──
+CLEANUP_TTL_12H = 12 * 3600   # 运行产物
+CLEANUP_TTL_24H = 24 * 3600   # 缓存类数据
 
 
 def ensure_dir(path: Path) -> Path:
     """确保目录存在，返回 Path。"""
     path.mkdir(parents=True, exist_ok=True)
     return path
-
 
 
 def screenshot_dir_today() -> Path:
@@ -57,15 +69,20 @@ def safe_screenshot_path(name: str) -> Path:
     return screenshot_dir_today() / f"{ts}_{safe}.png"
 
 
-
-
 __all__ = [
     "PROJECT_ROOT",
     "ARTIFACTS_ROOT",
     "SCREENSHOTS_ROOT",
+    "IMAGE_DIFF_ROOT",
+    "REPORTS_ROOT",
+    "PAGE_XML_ROOT",
+    "CACHE_ROOT",
+    "BASELINES_ROOT",
     "LOGS_ROOT",
     "TMP_ROOT",
-    "DEFAULT_KEEP_LATEST",
+    "DOCS_ROOT",
+    "CLEANUP_TTL_12H",
+    "CLEANUP_TTL_24H",
     "ensure_dir",
     "screenshot_dir_today",
     "safe_screenshot_path",

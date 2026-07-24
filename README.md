@@ -1,6 +1,6 @@
-# 笔记自动化测试
+# onyx自动化测试
 
-文石 BOOX 笔记应用的端到端自动化框架。**pytest + Appium + Allure，Excel 驱动**——测试人员只需编辑 Excel，无需写代码。
+Android 端到端自动化测试框架。**pytest + Appium + Allure，Excel 驱动**——测试人员只需编辑 Excel，无需写代码。
 
 ## 快速开始
 
@@ -408,4 +408,3 @@ boox_automation/
 - Python 3.9+
 - Appium Server 2.x
 - Android 设备（USB 调试）
-- 目标应用：文石笔记 `com.onyx.android.note`

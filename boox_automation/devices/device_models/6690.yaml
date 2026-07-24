@@ -6,3 +6,10 @@ NoteX6:
   type: 阅读器
   size: '10.3'
   colour: 黑白
+
+NoteAir6C:
+  platform: '6690'
+  region: 国内
+  type: 平板
+  size: '10.3'
+  colour: 彩色

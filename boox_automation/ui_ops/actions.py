@@ -19,7 +19,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
 from appium.webdriver.common.touch_action import TouchAction
 
-from boox_automation.ui_ops.element_catalog import describe as _describe_locator
+from boox_automation.ui_ops.element_desc import describe as _describe_locator
 
 # 仓库根目录，用于将绝对路径缩短为相对路径
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -189,26 +189,29 @@ def retry_and_handle_exceptions(max_retries=None, retry_delay=None):
                     call_label = f'{func.__name__}("{name_val}")'
 
             last_exc = None
-            for attempt in range(max_retries):
+            total_attempts = 1 + max_retries
+            for attempt in range(total_attempts):
                 try:
                     return func(*args, **kwargs)
                 except SESSION_FATAL_EXCEPTIONS:
                     raise
                 except RETRYABLE_EXCEPTIONS as e:
                     last_exc = e
-                    logging.debug(
-                        f"{call_label} 超时/未找到，重试 {attempt + 1}/{max_retries}"
-                    )
+                    if attempt < max_retries:
+                        logging.debug(
+                            f"{call_label} 超时/未找到，重试 {attempt + 1}/{max_retries}"
+                        )
                 except WebDriverException as e:
                     # 部分 driver 异常无法明确分类：用消息匹配把"会话失效"过滤为致命
                     text = str(e)
                     if any(k in text for k in SESSION_FATAL_KEYWORDS):
                         raise
                     last_exc = e
-                    logging.debug(
-                        f"{call_label} WebDriver 异常，重试 {attempt + 1}/{max_retries}: {type(e).__name__}"
-                    )
-                if attempt < max_retries - 1:
+                    if attempt < max_retries:
+                        logging.debug(
+                            f"{call_label} WebDriver 异常，重试 {attempt + 1}/{max_retries}: {type(e).__name__}"
+                        )
+                if attempt < max_retries:
                     time.sleep(retry_delay)
 
             desc = _annotate_with_catalog(filtered_args)
@@ -326,8 +329,8 @@ class Base_note_class:
         self.driver = driver
         self.default_timeout = 5
         self._settle_seconds = 0.3  # 操作后 UI 沉降等待
-        from boox_automation.engine.elements import get_element_loader
-        self.element_loader = get_element_loader()
+        from boox_automation.engine.elements import get_elements
+        self.elements = get_elements()
 
     # ---- 通用加固方法 ----
 
@@ -379,15 +382,11 @@ class Base_note_class:
 
     def get_element(self, element_key):
         """从元素定义获取元素信息（locator已转为(By, value)元组）。"""
-        return self.element_loader.get_element_info(element_key)
+        return self.elements.get_element_info(element_key)
 
     def get_element_source(self, element_key):
         """返回元素键所在的 YAML 文件路径，用于错误日志溯源。"""
-        return self.element_loader.get_key_source(element_key)
-
-    def get_element_line(self, element_key):
-        """返回元素键来源（Sheet 名）。"""
-        return self.element_loader.get_key_source(element_key)
+        return self.elements.get_key_source(element_key)
 
     @staticmethod
     def escape_xpath_text(text):
@@ -1461,14 +1460,27 @@ class Operation_method(Base_note_class):
 
     def click_slice(self, start_screen_width, start_screen_height, end_screen_width, end_screen_height):
         """
-        按**屏幕比例**滑动（起点→终点）。
+        按**屏幕比例**滑动（起点→终点），通过 adb shell input swipe 执行。
         """
+        import subprocess
+        from boox_automation.devices.device_info import Device_basic_information
+
         screen_size = self.driver.get_window_size()
         start_x = int(screen_size['width'] * start_screen_width)
         start_y = int(screen_size['height'] * start_screen_height)
         end_x = int(screen_size['width'] * end_screen_width)
         end_y = int(screen_size['height'] * end_screen_height)
-        self.driver.swipe(start_x, start_y, end_x, end_y, duration=100)
+
+        device_id = ""
+        try:
+            dbi = Device_basic_information()
+            device_id = dbi.get_connected_device_ids()
+        except Exception:
+            pass
+        prefix = f"adb -s {device_id} " if device_id else "adb "
+
+        cmd = f"{prefix}shell input swipe {start_x} {start_y} {end_x} {end_y} 100"
+        subprocess.run(cmd, shell=True, timeout=10)
         logging.debug(f"执行屏幕滑动：起点({start_x},{start_y}) → 终点({end_x},{end_y})")
         return True
 
@@ -1548,12 +1560,12 @@ class Operation_method(Base_note_class):
         from boox_automation.engine.xml_checker import XmlChecker
         from boox_automation.core.config import coord_verify_timeout
 
-        expected_key = self.element_loader.match_expected_result(tag)
+        expected_key = self.elements.match_expected_result(tag)
         if not expected_key:
             logging.warning(f"[坐标验证] 【{tag}】未在预期结果 B 列中匹配")
             return False
 
-        page_info = self.element_loader.get_expected_page(expected_key)
+        page_info = self.elements.get_expected_page(expected_key)
         if not page_info:
             logging.warning(f"[坐标验证] 【{tag}】（key={expected_key}）未找到预期结果定义")
             return False
@@ -1637,7 +1649,13 @@ class Operation_method(Base_note_class):
         logging.debug(f"[long_press_by_coord] 坐标长按成功: ({x_ratio:.2f},{y_ratio:.2f}) → 像素({x}, {y}) {duration}ms")
 
     def swipe_by_coord(self, element_key: str, duration: int = 300):
-        """按元素 locator 中的比例坐标滑动。locator 格式: x1,y1,x2,y2（起点→终点）。"""
+        """按元素 locator 中的比例坐标滑动，通过 adb shell input swipe 执行。
+
+        locator 格式: x1,y1,x2,y2（起点→终点）。
+        """
+        import subprocess
+        from boox_automation.devices.device_info import Device_basic_information
+
         _push_element_ctx('swipe_by_coord', element_key)
         info = self.get_element(element_key)
         loc_str = info['locator'][1] if isinstance(info.get('locator'), (list, tuple)) else str(info.get('locator', ''))
@@ -1653,7 +1671,16 @@ class Operation_method(Base_note_class):
         end_x = int(screen_size['width'] * x2)
         end_y = int(screen_size['height'] * y2)
 
-        self.driver.swipe(start_x, start_y, end_x, end_y, duration=duration)
+        device_id = ""
+        try:
+            dbi = Device_basic_information()
+            device_id = dbi.get_connected_device_ids()
+        except Exception:
+            pass
+        prefix = f"adb -s {device_id} " if device_id else "adb "
+
+        cmd = f"{prefix}shell input swipe {start_x} {start_y} {end_x} {end_y} {duration}"
+        subprocess.run(cmd, shell=True, timeout=10)
         self._settle_ui()
         logging.debug(f"[swipe_by_coord] 坐标滑动成功: ({x1:.2f},{y1:.2f})→({x2:.2f},{y2:.2f}) "
                       f"像素({start_x},{start_y})→({end_x},{end_y}) {duration}ms")
@@ -1683,7 +1710,7 @@ class Operation_method(Base_note_class):
             return
 
         # 获取 device_id
-        from boox_automation.devices.info import Device_basic_information
+        from boox_automation.devices.device_info import Device_basic_information
         device_id = ""
         try:
             dbi = Device_basic_information()

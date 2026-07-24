@@ -52,16 +52,18 @@ _EXPECTED_SHEET_MODULE_RE = re.compile(r"预期结果【(.+?)】")
 _HEADER_KEYWORDS = {"模块", "元素标识", "匹配文本", "定位方式", "定位元素", "操作类型", "操作", "页面XML", "xml页面", "检查元素", "用途说明", "断言存在", "断言不存在", "断言toast", "断言toast不出现"}
 
 
-def _find_header_row(rows: list, default: int = 1) -> int:
+def _find_header_row(rows: list, default: int = 1, keywords: set | None = None) -> int:
     """自动检测表头行位置。任意行含表头关键字即视为表头行。
 
+    keywords: 自定义关键字集合，不传则使用默认的元素表/预期结果表关键字。
     Returns: 表头行索引，未找到返回 default。
     """
+    match_keys = keywords if keywords is not None else _HEADER_KEYWORDS
     for i, row in enumerate(rows):
         if not row:
             continue
         texts = {str(c).strip() for c in row if c}
-        if _HEADER_KEYWORDS & texts:
+        if match_keys & texts:
             return i
     return default
 
@@ -75,6 +77,7 @@ _EXPECTED_ACTION_MAP = {
     "断言toast不出现": "toast_not",
     "断言选中": "checked",
     "断言未选中": "unchecked",
+    "断言截图": "image_diff",
 }
 
 _VALID_EXPECTED_ACTIONS = set(_EXPECTED_ACTION_MAP.keys())
@@ -436,7 +439,7 @@ def _check_checked_state(xpath_text: str, mode: str,
 _ELEMENT_LOADER_INSTANCE = None
 
 
-def get_element_loader():
+def get_elements():
     """获取全局唯一的 ElementLoader 实例（单例）。"""
     global _ELEMENT_LOADER_INSTANCE
     if _ELEMENT_LOADER_INSTANCE is None:
@@ -776,7 +779,7 @@ class ElementLoader:
             )
             if skipped:
                 for s in self._skipped_expected:
-                    logger.warning(
+                    logger.debug(
                         f"  ↳ 跳过 第{s['row']}行【{s['key']}】: {s['reason']}"
                     )
         elif self._expected_sheets_found:
@@ -885,7 +888,7 @@ class ElementLoader:
             )
             if skipped:
                 for s in self._skipped_expected:
-                    logger.warning(
+                    logger.debug(
                         f"  ↳ 跳过 第{s['row']}行【{s['key']}】: {s['reason']}"
                     )
         elif self._expected_sheets_found:
@@ -1086,10 +1089,19 @@ class ElementLoader:
                         "reason": f"E列为'{action_clean}'但B列（匹配文本）为空",
                     })
                     continue
+            elif action_clean == "断言截图":
+                # 截图对比模式：仅需 B 列（场景名），由 BaselineStore 查表，不需要 C/D
+                if not match:
+                    logger.warning(f"预期结果{sheet_label}【{key}】E列为'断言截图'但B列（匹配文本/场景名）为空，跳过（第{sheet_row}行）")
+                    self._skipped_expected.append({
+                        "row": sheet_row, "key": key, "match": "(空)",
+                        "reason": "E列为'断言截图'但B列（匹配文本/场景名）为空",
+                    })
+                    continue
             else:
                 # visible / not_visible 模式：C/D 列至少有一个
                 if not info.get("content") and not info.get("element_checks"):
-                    logger.warning(f"预期结果{sheet_label}【{key}】页面XML和检查元素均为空，跳过（第{sheet_row}行）")
+                    logger.debug(f"预期结果{sheet_label}【{key}】页面XML和检查元素均为空，跳过（第{sheet_row}行）")
                     self._skipped_expected.append({
                         "row": sheet_row, "key": key, "match": match or "(空)",
                         "reason": "C列（定位元素）和 D列（xml页面）均为空，非toast模式下需至少填写一项",
@@ -1101,6 +1113,13 @@ class ElementLoader:
             # 建立匹配文本 → key 索引
             match_text = info.get("match", "")
             if match_text:
+                prev_key = self._expected_match_index.get(match_text)
+                if prev_key and prev_key != key:
+                    # TODO: 重名时改为 RuntimeError 中断（需先确认飞书表无历史脏数据）
+                    logger.warning(
+                        f"预期结果{sheet_label}匹配文本「{match_text}」在第{sheet_row}行重复出现，"
+                        f"原 key={prev_key}，新 key={key}，将以最后一条为准"
+                    )
                 self._expected_match_index[match_text] = key
 
     def get_expected_page(self, key: str) -> dict | None:
@@ -1304,7 +1323,7 @@ class ElementLoader:
             return cls._device_info_cache or {}
         cls._device_info_loaded = True
         try:
-            from boox_automation.devices.info import Device_basic_information
+            from boox_automation.devices.device_info import Device_basic_information
             devices = Device_basic_information()
             cls._device_info_cache = devices.get_device_info() or {}
         except Exception:
@@ -1373,9 +1392,9 @@ class ElementMatcher:
 
     def _build_index(self) -> None:
         """从 ElementLoader 获取所有元素，构建 text → key 反向索引。"""
-        from boox_automation.engine.elements import get_element_loader
+        from boox_automation.engine.elements import get_elements
 
-        loader = get_element_loader()
+        loader = get_elements()
         loader._ensure_loaded()
         for key, info in loader._elements.items():
             if not info.get("locator"):
@@ -1402,7 +1421,7 @@ class ElementMatcher:
     # ---- 匹配逻辑 ----
 
     def match(self, tag: str, page_context: str = "", case_context: str = "",
-             warn: bool = True) -> str:
+             warn: bool | None = True) -> str:
         """根据【】标记文本查找 element_key。
 
         warn=True:  未匹配时 WARNING（运行时用）
@@ -1530,8 +1549,8 @@ class ElementMatcher:
     # ---- 元素信息查询 ----
 
     def _get_elements(self) -> dict:
-        from boox_automation.engine.elements import get_element_loader
-        return get_element_loader()._elements
+        from boox_automation.engine.elements import get_elements
+        return get_elements()._elements
 
     def get_element(self, element_key: str) -> dict | None:
         return self._get_elements().get(element_key)

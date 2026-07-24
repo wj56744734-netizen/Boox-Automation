@@ -119,6 +119,14 @@ def feishu_elements_token() -> str:
     )
 
 
+def feishu_baseline_token() -> str:
+    """基准图电子表格 token，用于「断言截图」对比。"""
+    return _extract_token(
+        os.environ.get("FEISHU_BASELINE_TOKEN")
+        or get_str("feishu.baseline_token")
+    )
+
+
 def test_case_sheets() -> list[str]:
     """返回要加载的用例 sheet 列表，支持环境变量逗号分隔。"""
     env = os.environ.get("NOTE_TEST_CASE_SHEETS")
@@ -173,7 +181,7 @@ def case_path() -> str:
     env = os.environ.get("NOTE_TEST_CASE_PATH", "")
     if env:
         return _resolve_local_path(env)
-    raw = get_str("excel.test_case_path", "data/test_cases.xlsx")
+    raw = get_str("excel.test_case_path", "data/tests.xlsx")
     return _resolve_local_path(raw)
 
 
@@ -201,16 +209,6 @@ def excel_priority_filter() -> str:
     if env:
         return env
     return get_str("excel.priority_filter", "P0")
-
-
-def excel_test_case_file() -> str:
-    """已弃用: 请使用 case_path()。保留以兼容旧代码。"""
-    return get_str("excel.test_case_path", "data/test_cases.xlsx")
-
-
-def excel_elements_file() -> str:
-    """已弃用: 请使用 elements_path()。保留以兼容旧代码。"""
-    return get_str("excel.elements_path", "data/elements.xlsx")
 
 
 def test_modules() -> list[str]:
@@ -315,10 +313,6 @@ def timeout_xml_element_wait() -> int:
     return get_int("timeout.xml_element_wait", 5)
 
 
-def timeout_app_launch() -> int:
-    return get_int("timeout.app_launch", 30)
-
-
 def retry_max_attempts() -> int:
     return get_int("retry.max_attempts", 3)
 
@@ -339,26 +333,53 @@ def logcat_capture_timeout() -> int:
     return get_int("logcat.capture_timeout", 80)
 
 
-def cleanup_keep_latest() -> int:
-    return int(os.environ.get("NOTE_ARTIFACTS_KEEP_LATEST",
-           str(get_int("cleanup.keep_latest", 5))))
+def cleanup_ttl_12h() -> int:
+    """运行产物 TTL（秒），默认 12 小时。"""
+    return get_int("cleanup.ttl_12h", 43200)
 
 
-def shape_data_path() -> str:
-    return get_str("paths.shape_data", "")
+def cleanup_ttl_24h() -> int:
+    """缓存数据 TTL（秒），默认 24 小时。"""
+    return get_int("cleanup.ttl_24h", 86400)
 
 
 def driver_failure_threshold() -> int:
     return get_int("driver.failure_threshold", 3)
 
 
-def screenshot_enabled() -> bool:
-    return get_bool("screenshot.enabled", True)
-
-
 def cache_max_age() -> int:
     return get_int("cache.max_age_seconds", 86400)
 
 
-def cache_dir() -> str:
-    return get_str("cache.dir", "data/.cache")
+# ---- 截图对比 (image_compare) ----
+
+def image_compare_auto_detect_mask() -> bool:
+    return get_bool("image_compare.auto_detect_mask", True)
+
+
+def image_compare_fallback_top_ratio() -> float:
+    return get_float("image_compare.fallback_top_ratio", 0.025)
+
+
+def image_compare_fallback_bottom_px() -> int:
+    return get_int("image_compare.fallback_bottom_px", 120)
+
+
+def image_compare_mse_threshold() -> float:
+    return get_float("image_compare.mse_threshold", 100)
+
+
+def image_compare_template_match_threshold() -> float:
+    return get_float("image_compare.template_match_threshold", 0.65)
+
+
+def image_compare_diff_min_area() -> int:
+    return get_int("image_compare.diff_min_area", 1800)
+
+
+def image_compare_extra_ignore_regions() -> list:
+    """额外手动忽略区域，按比例 [x1,y1,x2,y2]（0-1）。"""
+    val = get("image_compare.extra_ignore_regions")
+    if isinstance(val, list):
+        return val
+    return []

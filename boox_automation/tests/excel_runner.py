@@ -3,7 +3,7 @@
 每条 Excel 用例作为独立的 pytest 用例执行，自动获得 note_test_initial 的完整环境清理。
 
 运行方式:
-    pytest boox_automation/tests/test_excel_runner.py -s
+    pytest boox_automation/tests/excel_runner.py -s
 """
 from __future__ import annotations
 import sys
@@ -19,7 +19,7 @@ if _project_root not in sys.path:
 import pytest
 import openpyxl
 from boox_automation.driver import driver
-from boox_automation.ui_ops.operations import (
+from boox_automation.ui_ops.actions import (
     Operation_method, set_step_context, clear_step_context, clear_element_ctx,
 )
 from boox_automation.tests.helpers import Public_method
@@ -44,7 +44,7 @@ _PRIORITY_ORDER = {"P0": 0, "P1": 1, "P2": 2, "TEST": 3}
 def _get_device_info_safe() -> dict:
     """安全获取设备信息，失败返回空字典（不影响模块加载）。"""
     try:
-        from boox_automation.devices.info import Device_basic_information
+        from boox_automation.devices.device_info import Device_basic_information
         dbi = Device_basic_information()
         return dbi.get_device_info() or {}
     except Exception:
@@ -54,7 +54,7 @@ def _get_device_info_safe() -> dict:
 def _get_device_id_safe() -> str:
     """安全获取当前连接的设备ID，失败返回空字符串。"""
     try:
-        from boox_automation.devices.info import Device_basic_information
+        from boox_automation.devices.device_info import Device_basic_information
         dbi = Device_basic_information()
         return dbi.get_connected_device_ids() or ""
     except Exception:
@@ -101,8 +101,8 @@ def _parse_case_rows(rows: list[list[str]]) -> list[ParsedCase]:
 
 def _resolve_case_elements(cases: list[ParsedCase]) -> list[ParsedCase]:
     """为过滤后的用例匹配元素（仅对要执行的少量用例做匹配）。"""
-    from boox_automation.engine.elements import get_element_loader
-    _loader = get_element_loader()
+    from boox_automation.engine.elements import get_elements
+    _loader = get_elements()
 
     for case in cases:
         ctx = f"R{case.row_number} [{case.priority}] {case.title}"
@@ -149,7 +149,7 @@ def _resolve_case_elements(cases: list[ParsedCase]) -> list[ParsedCase]:
     skipped_list = diag.get("skipped", [])
     if skipped_list:
         for s in skipped_list:
-            logger.warning(
+            logger.debug(
                 f"  ↳ 跳过 第{s['row']}行【{s['key']}】: {s['reason']}"
             )
 
@@ -214,7 +214,7 @@ def _load_cases(excel_path: str, sheets: list[str], priority_spec: str) -> list[
             )
         try:
             sheet_data = _read_cloud_sheets(sheets)
-            save_cache({"sheets": sheet_data}, "test_cases")
+            save_cache({"sheets": sheet_data}, "tests")
             logger.info("用例来源: 飞书云端（已更新本地缓存）")
             return _parse_cases_from_sheets(sheet_data, sheets, priority_spec)
         except Exception as e:
@@ -290,7 +290,7 @@ def _parse_cases_from_sheets(sheet_data: dict, sheets: list[str],
 def _load_cases_from_cache(sheets: list[str], priority_spec: str) -> list | None:
     """从缓存加载用例，缓存过期或无数据返回 None。"""
     from boox_automation.core.feishu import load_cache
-    cached = load_cache("test_cases")
+    cached = load_cache("tests")
     if not cached:
         return None
     sheet_data = cached.get("sheets", {})
@@ -302,7 +302,7 @@ def _load_cases_from_cache(sheets: list[str], priority_spec: str) -> list | None
 
 def _make_case_id(case: ParsedCase) -> str:
     prefix = "[跳过]" if case.skip_reason else ""
-    return f"{prefix}R{case.row_number}-{case.title[:30]}"
+    return f"{prefix}R{case.row_number}-{case.title}"
 
 
 # ── 用例收集 ──
@@ -321,7 +321,7 @@ _executable.sort(key=lambda c: (_PRIORITY_ORDER.get(c.priority, 99), c.row_numbe
 _skipped = len(_all_cases) - len(_executable)
 
 # 收集完成：输出汇总（用例 + 元素 + 预期结果）
-from boox_automation.engine.elements import get_element_loader as _get_loader_for_summary
+from boox_automation.engine.elements import get_elements as _get_loader_for_summary
 _summary_loader = _get_loader_for_summary()
 _elem_count = len(_summary_loader)
 _er_diag = _summary_loader.get_expected_diagnostics()
@@ -374,13 +374,13 @@ class TestExcelRunner:
             case.skip_reason = runtime_skip
             pytest.skip(runtime_skip)
 
-        # 用例完整性校验（步骤号重复 / 元素缺失 / checks格式错误等）
+        # 用例完整性校验（步骤号重复 / 元素缺失）
+        # 表格数据缺失属于用例本身问题，直接失败，方便排查
         validation_skip = validate_case(case)
         if validation_skip:
-            case.skip_reason = validation_skip
             for s in case.steps:
-                s.status = "skip"
-            pytest.skip(validation_skip)
+                s.status = "fail"
+            raise AssertionError(validation_skip)
 
         # 检查步骤（action=skip）必须配合 I 列预期结果，缺失时直接中断
         check_steps = [s for s in case.steps if s.action == "skip" and s.tag]
@@ -451,10 +451,15 @@ class TestExcelRunner:
         """全部用例执行完后，打印汇总。"""
         from boox_automation.engine.reporter import ExcelReporter
         summary = {"pass": 0, "fail": 0, "skip": 0}
+        skipped_details: list[str] = []
         for case in _all_cases:
             status = ExcelReporter._case_status(case)
             summary[status] = summary.get(status, 0) + 1
+            if status == "skip" and case.skip_reason:
+                skipped_details.append(f"  R{case.row_number} [{case.title}]: {case.skip_reason}")
         logger.info(f"用例汇总: 通过={summary['pass']}, 不通过={summary['fail']}, 跳过={summary['skip']}")
+        if skipped_details:
+            logger.info("跳过原因:\n" + "\n".join(skipped_details))
 
 
 def _dispatch_step(method, public, step):
@@ -527,11 +532,11 @@ def _check_expected_by_tag(method, expected_by_tag: dict, consumed: dict, step, 
 
     if not ep.expected_key:
         ep.status = "fail"
-        from boox_automation.engine.elements import get_element_loader
+        from boox_automation.engine.elements import get_elements
         from boox_automation.engine.diagnostics import (
             expected_sheet_not_found, expected_tag_not_matched,
         )
-        loader = get_element_loader()
+        loader = get_elements()
         diag = loader.get_expected_diagnostics()
 
         modules = diag.get("modules", [])
@@ -616,14 +621,14 @@ def _dispatch_expected_page(method, ep) -> None:
     优先级: toast → D列XPath检查 → C列XML对比 → 本地文件回退
     """
     from boox_automation.engine.elements import (
-        get_element_loader, _resolve_device_content,
+        get_elements, _resolve_device_content,
         _load_expected_from_file, _check_elements_by_xpath,
         _check_checked_state, _EXPECTED_ACTION_MAP,
     )
     from boox_automation.engine.xml_checker import XmlChecker
     from boox_automation.driver import driver
 
-    loader = get_element_loader()
+    loader = get_elements()
     page_info = loader.get_expected_page(ep.expected_key)
     if not page_info:
         logger.warning(f"步骤{ep.step_seq}：预期结果【{ep.tag}】（key={ep.expected_key}）在预期结果工作表中未找到")
@@ -671,6 +676,69 @@ def _dispatch_expected_page(method, ep) -> None:
             )
         _check_checked_state(checks_content, mode=check_mode,
                              expected_key=ep.expected_key, step_seq=ep.step_seq)
+        ep.status = "pass"
+        return
+
+    # image_diff 模式：从基准图表查 → 截图 → OpenCV 对比
+    if check_mode == 'image_diff':
+        from boox_automation.engine.baseline_store import BaselineStore
+        from boox_automation.engine.image_compare import compare as image_compare
+        from boox_automation.core.paths import IMAGE_DIFF_ROOT, ensure_dir
+        import time
+
+        device_info = _get_device_info_safe()
+        size = str(device_info.get("device_size", "") or "")
+        dpi = device_info.get("device_dpi")
+        colour = str(device_info.get("driver_colour", "") or "")
+        device_type = str(device_info.get("devices_reader", "") or "")
+        raw_orientation = str(getattr(driver, 'orientation', 'PORTRAIT') or 'PORTRAIT')
+        orientation = "竖屏" if raw_orientation == "PORTRAIT" else "横屏"
+
+        # module 从预期 key 推导：key = 模块.匹配文本
+        module = ep.expected_key.split(".", 1)[0] if "." in ep.expected_key else ep.expected_key
+        scene = page_info.get("match", "") or ep.tag
+
+        # 目录和文件按设备信息命名，与基准图缓存结构一致
+        dpi_str = str(int(float(str(dpi)))) if dpi is not None else ""
+        device_dir = f"{size}_{dpi_str}_{colour}_{device_type}_{orientation}"
+        work_dir = ensure_dir(IMAGE_DIFF_ROOT / device_dir / module)
+        actual_path = work_dir / f"{scene}_actual.png"
+        try:
+            time.sleep(1.5)  # 等待页面渲染稳定再截图
+            actual_path.write_bytes(driver.get_screenshot_as_png())
+        except Exception as e:
+            ep.status = "fail"
+            raise AssertionError(
+                f"步骤{ep.step_seq}：预期结果【{ep.tag}】截图失败: {e}")
+
+        try:
+            baseline_path = BaselineStore.instance().lookup(
+                size, dpi, colour, device_type, orientation, module, scene)
+            logger.info(f"基准图加载: {baseline_path} (设备: {size}_{dpi_str}_{colour}_{device_type}_{orientation})")
+        except Exception as e:
+            ep.status = "fail"
+            raise AssertionError(
+                f"步骤{ep.step_seq}：预期结果【{ep.tag}】基准图查找失败: {e}")
+
+        result_path = work_dir / f"{scene}_diff.png"
+        logger.info(f"开始截图对比: 基准图={baseline_path}, 实际截图={actual_path}")
+        result = image_compare(str(baseline_path), str(actual_path), str(result_path))
+
+        if not result.get("success"):
+            ep.status = "fail"
+            raise AssertionError(
+                f"步骤{ep.step_seq}：预期结果【{ep.tag}】图片对比失败: "
+                f"{result.get('reason')}"
+            )
+        if result.get("has_diff"):
+            ep.status = "fail"
+            raise AssertionError(
+                f"步骤{ep.step_seq}：预期结果【{ep.tag}】检测到 "
+                f"{result.get('diff_regions', 0)} 处差异 "
+                f"(MSE={result.get('mse') or 0:.2f})。"
+                f"差异图: {result.get('result_path')}"
+            )
+        logger.info(f"截图对比完成: 无差异 (MSE={result.get('mse') or 0:.2f})")
         ep.status = "pass"
         return
 
@@ -754,7 +822,7 @@ def _dispatch_expected_page(method, ep) -> None:
 
 if __name__ == "__main__":
     import sys
-    # 确保项目根在 sys.path 中（VS Code 绿色三角形等直接 python 运行场景）
+    # 确保项目根在 sys.path 中
     _proj_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     if _proj_root not in sys.path:
         sys.path.insert(0, _proj_root)

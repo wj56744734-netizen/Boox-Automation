@@ -3,7 +3,7 @@ import logging
 import time
 from threading import Thread, Event, Condition, Lock
 from queue import Queue
-from boox_automation.devices.info import Device_basic_information
+from boox_automation.devices.device_info import Device_basic_information
 
 _LOGCAT_INIT_LOGGED = [False]  # 只输出一次初始化日志
 

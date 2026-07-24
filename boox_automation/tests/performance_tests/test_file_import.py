@@ -6,15 +6,16 @@ _project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
-from boox_automation.devices.info import (
-    TEST_FILES_DISPLAY_ROOT, TEST_FILES_DIR_LOCAL_FILE,
-)
-from boox_automation.ui_ops.operations import Operation_method
+from boox_automation.ui_ops.actions import Operation_method
 from boox_automation.tests.helpers import Public_method
 from boox_automation.driver import driver
 from selenium.webdriver.common.by import By
 
 import logging
+
+# 设备端测试文件路径常量
+TEST_FILES_DISPLAY_ROOT = "笔记自动化测试文件"
+TEST_FILES_DIR_LOCAL_FILE = "用例测试，从本地文件导入"
 import pytest
 
 

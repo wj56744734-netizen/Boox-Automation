@@ -16,7 +16,9 @@ __pycache__/
 allure-results/
 allure-report/
 boox_automation/artifacts/
-boox_automation/data/.cache/
+
+# Development docs (临时方案文档，不入库)
+docs/
 boox_automation/scripts/Note_page_contrast/temporary_image/
 boox_automation/scripts/Note_page_contrast/exception_page/
 

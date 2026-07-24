@@ -24,7 +24,7 @@ retry:
   delay: 1.5              # 秒
 
   # _safe_click / _safe_long_press 的 StaleElement 重试次数
-  element_click: 2        # 次
+  element_click: 1        # 次
 
   # StaleElement 重试前等待时间
   stale_element_delay: 0.5  # 秒
@@ -87,7 +87,7 @@ excel:
   # - "设置"    ← 后续模块结构对齐后取消注释即可
 
   # 优先级筛选：P0=仅P0  P1=P1+P2  P2=仅P2  test=仅test  空=全部
-  priority_filter: "P0"  # 环境变量 NOTE_TEST_PRIORITY 可覆盖
+  priority_filter: "test"  # 环境变量 NOTE_TEST_PRIORITY 可覆盖
 
   # 模块筛选：逗号分隔，仅运行 C 列匹配的模块。空=全部
   # 环境变量 NOTE_TEST_MODULES 可覆盖（逗号分隔）
@@ -96,12 +96,12 @@ excel:
   # 本地用例文件路径（仅 source=local 时生效）
   # 支持相对路径（相对于项目根目录）或绝对路径
   # 环境变量 NOTE_TEST_CASE_PATH 可覆盖
-  test_case_path: "xxx"
+  test_case_path: "/Users/xiaoyu/Automation_projects/notes-test-kb/输出/笔记首页_待审核_测试用例表.xlsx"
 
   # --- 元素 ---
   # 本地元素文件路径（仅 source=local 时生效）
   # 环境变量 NOTE_ELEMENTS_PATH 可覆盖
-  elements_path: "xxx"
+  elements_path: "/Users/xiaoyu/Automation_projects/notes-test-kb/输出/知识库改造_元素表.xlsx"
 
   # 用例表列索引（0-based）
   columns:
@@ -132,6 +132,11 @@ feishu:
   elements_token: "https://s07005grio.feishu.cn/sheets/LjYzsLHSOh3xyItZ7TLcqnqvn3e?sheet=0dVwPT"
   # 元素 sheet 按模块名筛选，与 test_case_sheets 保持一致
   # 始终自动加载"通用"模块（无需手动配置）
+
+  # --- 基准图电子表格 ---
+  # 用于「断言截图」对比，存放各设备(size+dpi+colour)+模块+场景对应的基准图
+  # 环境变量 FEISHU_BASELINE_TOKEN 可覆盖
+  baseline_token: "https://s07005grio.feishu.cn/sheets/BEgTsm4PkhPiwNtPTp2cQlIRnnc"
 
   # --- 测试报告推送 ---
   report:
@@ -178,9 +183,10 @@ toast:
 
 # ==================== 产物清理配置 ====================
 cleanup:
-  # 每类产物（截图/报告/日志）保留最近 N 轮，超出自动删除
-  # 环境变量 NOTE_ARTIFACTS_KEEP_LATEST 可覆盖
-  keep_latest: 5          # 轮
+  # 运行产物 TTL（秒），超期自动删除（默认 12 小时）
+  ttl_12h: 43200
+  # 缓存数据 TTL（秒），超期自动删除（默认 24 小时）
+  ttl_24h: 86400
 
 # ==================== 路径配置 ====================
 paths:
@@ -192,10 +198,25 @@ driver:
   # session 连续失败 N 次后终止测试，避免无限重试
   failure_threshold: 3    # 次
 
+# ==================== 截图对比配置 ====================
+image_compare:
+  # 自动检测顶部状态栏 + 底部导航栏并涂黑 mask（不参与差分）
+  auto_detect_mask: true
+  # 自动检测失败时（顶部无内容带，如沉浸式全屏），按高度比例涂黑状态栏兜底
+  fallback_top_ratio: 0.025
+  fallback_bottom_px: 120
+  # MSE 小于此值直接判定无差异
+  mse_threshold: 100
+  # 模板匹配相似度下限
+  template_match_threshold: 0.65
+  # 差异轮廓最小面积像素数，小于此值忽略
+  diff_min_area: 1800
+  # 额外手动忽略区域（按比例 [x1,y1,x2,y2]，0-1），默认空
+  # 常用于屏蔽悬浮球等系统级 UI 元素干扰
+  extra_ignore_regions:
+    - [0.85, 0.4, 0.97, 0.6]    # 悬浮球区域（可根据实际位置调整）
+
 # ==================== 缓存配置 ====================
 cache:
   # 本地缓存有效期，超期后优先从云端刷新
   max_age_seconds: 86400  # 秒，默认 24 小时
-
-  # 缓存文件目录（相对于 boox_automation/）
-  dir: "data/.cache"

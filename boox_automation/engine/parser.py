@@ -162,6 +162,16 @@ def parse_preconditions(raw_text: str | None) -> list[Precondition]:
             ))
             continue
 
+        # 3b. 屏幕方向设置 — 需在 fixture 阶段执行
+        if content in ("设置竖屏", "设置横屏"):
+            kind = "portrait" if content == "设置竖屏" else "landscape"
+            preconditions.append(Precondition(
+                raw=content,
+                type="orientation",
+                kind=kind,
+            ))
+            continue
+
         # 4. 文件检查候选（【】不在内置关键字中，运行时查表确认）
         tag = tags[0].strip()
         preconditions.append(Precondition(
@@ -177,6 +187,14 @@ def parse_preconditions(raw_text: str | None) -> list[Precondition]:
 def has_cleanup(preconditions: list, kind: str) -> bool:
     """检查前置条件中是否包含指定清理类型。kind: 'app_data' | 'storage_files'"""
     return any(pc.type == "cleanup" and pc.kind == kind for pc in preconditions)
+
+
+def has_orientation(preconditions: list) -> str | None:
+    """检查前置条件中是否包含屏幕方向设置。返回 'portrait'/'landscape'/None。"""
+    for pc in preconditions:
+        if pc.type == "orientation":
+            return pc.kind
+    return None
 
 
 def _detect_action(text: str, tag: str) -> str:
@@ -209,8 +227,8 @@ def check_conditions(preconditions: list, device_info: dict, device_id: str = ""
                 return _build_skip_reason(pc, device_info)
 
         elif pc.type == "file_check_candidate":
-            from boox_automation.engine.elements import get_element_loader
-            loader = get_element_loader()
+            from boox_automation.engine.elements import get_elements
+            loader = get_elements()
             pc_info = loader.get_precondition(pc.kind)
             if pc_info:
                 ok, reason = _check_file(pc_info, device_info, device_id)
@@ -308,7 +326,7 @@ def _check_file(pc_info: dict, device_info: dict, device_id: str) -> tuple[bool,
     # 获取 device_id
     if not device_id:
         try:
-            from boox_automation.devices.info import Device_basic_information
+            from boox_automation.devices.device_info import Device_basic_information
             dbi = Device_basic_information()
             device_id = dbi.get_connected_device_ids()
         except Exception:

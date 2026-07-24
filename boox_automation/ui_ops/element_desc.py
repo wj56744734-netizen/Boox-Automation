@@ -12,8 +12,6 @@
 
 from __future__ import annotations
 
-from __future__ import annotations
-
 ELEMENT_DESCRIPTIONS: dict[str, str] = {
     # —— 笔记首页 / 通用列表 ——
     "com.onyx:id/create_icon": "笔记首页：创建按钮（有笔记状态）",

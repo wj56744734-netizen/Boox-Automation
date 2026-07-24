@@ -9,10 +9,7 @@ if _project_root not in sys.path:
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.wait import WebDriverWait
-from boox_automation.ui_ops.operations import Operation_method
-from boox_automation.devices.info import (
-    TEST_FILES_DISPLAY_ROOT, TEST_FILES_DIR_NOTE_RENDER,
-)
+from boox_automation.ui_ops.actions import Operation_method
 from boox_automation.driver import driver
 from boox_automation.ui_ops.logcat import Logcat
 from selenium.webdriver.support import expected_conditions as EC
@@ -21,6 +18,10 @@ import logging
 import subprocess
 import time
 import pytest
+
+# 设备端测试文件路径常量
+TEST_FILES_DISPLAY_ROOT = "笔记自动化测试文件"
+TEST_FILES_DIR_NOTE_RENDER = "固件迭代测试项（笔记渲染）"
 
 
 class Test_Render_Time:
@@ -41,15 +42,7 @@ class Test_Render_Time:
         :param guide_done_flag: 实例属性名（字符串），用于访问和修改标志
         :return: None
         """
-        # version_str = None
-        #
-        # version_str = self.public.get_version(short=True)
-        #
-        # if version_str == "4.2":
-        #     guide_text = "点击页码，快速管理页面缩略图"
-        # else:
-        #     guide_text = "点击页码可进入【缩略图】页面管理"
-
+  
         guide_text = "在【笔记设置】中可设置“翻页缩放偏好"
 
         if getattr(self, guide_done_flag, False):
@@ -60,7 +53,7 @@ class Test_Render_Time:
             wait = WebDriverWait(self.driver, 5)
             element = wait.until(EC.visibility_of_element_located((By.XPATH, f'//*[@text="{guide_text}"]')))
             if element:
-                self.method.xpath_text_click(element_key="笔记首页.弹窗通用知道了")
+                self.method.xpath_text_click(name="知道了")
                 logging.debug(f"检测到引导并已处理: {guide_text}")
         except Exception:
             logging.debug(f"未检测到引导: {guide_text}")
@@ -75,11 +68,12 @@ class Test_Render_Time:
         :param guide_done_flag: 实例属性名（字符串），用于访问和修改标志
         :return: None
         """
+        time.sleep(1)  # 等待引导弹窗出现
         version_str = None
 
         version_str = self.public.get_version(short=True)
 
-        if version_str == "4.2":
+        if version_str == "4.2" or version_str == "4.3":
             guide_text = "点击页码，快速管理页面缩略图"
         else:
             guide_text = "点击页码可进入【缩略图】页面管理"
@@ -92,7 +86,7 @@ class Test_Render_Time:
             wait = WebDriverWait(self.driver, 5)
             element = wait.until(EC.visibility_of_element_located((By.XPATH, f'//*[@text="{guide_text}"]')))
             if element:
-                self.method.xpath_text_click(element_key="笔记首页.弹窗通用知道了")
+                self.method.xpath_text_click(name="知道了")
                 logging.debug(f"检测到引导并已处理: {guide_text}")
         except Exception:
             logging.debug(f"未检测到引导: {guide_text}")
@@ -109,7 +103,7 @@ class Test_Render_Time:
 
         version_str = self.public.get_version(short=True)
         # 注意：device_size 为模块级变量，需在方法内声明 global 才能修改（此处只读，无需 global）
-        if version_str == "4.2" and device_size != "6.13":
+        if version_str == "4.2" or version_str == "4.3" and device_size != "6.13":
             try:
                 self.public.toolbar_navigation()
                 logging.debug("已处理 4.2 版本工具条引导")
@@ -126,14 +120,14 @@ class Test_Render_Time:
         while n <= times:
             activity_before_click = self.driver.current_activity
             self.get_file_note(f"{note_name}.note")
-            self.method.by_name_click(element_key="通用操作.笔记内-导入确认按钮")
             import_note = self.Logcat.capture_render_logcat(target_logs=import_note_logcat, test_page=f"{note_name}", match_count=1)
+            self.method.by_name_click(by_method=By.ID, locator="com.onyx.android.note:id/start_import", name="确定")
             import_note.join()
 
             # 处理工具条引导（只执行一次）
             self.handle_toolbar_guide()
 
-            self.method.by_element_click(element_key="通用操作.笔记内-返回按钮")
+            self.method.by_element_click(by_method=By.ID, locator="com.onyx.android.note:id/back_icon")
             activity_timeout = time.time() + 30
             while time.time() < activity_timeout:
                 activity_after_click = self.driver.current_activity
@@ -149,11 +143,11 @@ class Test_Render_Time:
         n = 1
         while n <= times:
             activity_before_click = self.driver.current_activity
-            self.get_note(note_name, n)
             open_note = self.Logcat.capture_render_logcat(target_logs=open_note_logcat, test_page=f"{note_name}", match_count=1)
+            self.get_note(note_name, n)
             open_note.join()
             time.sleep(1)
-            self.method.by_element_click(element_key="通用操作.笔记内-返回按钮")
+            self.method.by_element_click(by_method=By.ID, locator="com.onyx.android.note:id/back_icon")
             activity_timeout = time.time() + 30
             while time.time() < activity_timeout:
                 activity_after_click = self.driver.current_activity
@@ -168,8 +162,8 @@ class Test_Render_Time:
         """ 笔记内翻页渲染 """
         n = 1
         retry_count = 0
-        self.get_note(note_name, n)
         open_note = self.Logcat.capture_render_logcat(target_logs=open_note_logcat, test_page=f"{note_name}", match_count=1, reader_time_log=False)
+        self.get_note(note_name, n)
         open_note.join()
 
         while n <= page_turning:
@@ -210,18 +204,17 @@ class Test_Render_Time:
                     n += 1
                     retry_count = 0
 
-        self.method.by_element_click(element_key="通用操作.笔记内-返回按钮")
+        self.method.by_element_click(by_method=By.ID, locator="com.onyx.android.note:id/back_icon")
 
     def note_thumbnail_rendering_time(self, open_note_logcat, note_thumbnail_logcat, note_name, n=3):
         """ 笔记缩略图半屏渲染耗时测试 """
-        self.get_note(note_name, n)
-
         note_page = self.Logcat.capture_render_logcat(target_logs=open_note_logcat, test_page=f"{note_name}", match_count=1, reader_time_log=False)
+        self.get_note(note_name, n)
         note_page.join()
 
         note_thumbnail = self.Logcat.capture_render_logcat(target_logs=note_thumbnail_logcat, test_page=f"{note_name}", match_count=5)
 
-        self.method.by_element_click(element_key="通用操作.笔记内-标题入口")
+        self.method.by_element_click(by_method=By.ID, locator="com.onyx.android.note:id/title")
 
         # 处理缩略图引导（只处理一次）
         self.note_thumbnail_guide( "note_thumbnail_guide_done")
@@ -230,22 +223,28 @@ class Test_Render_Time:
 
         version = self.public.get_version(short=True)
 
-        if version in {"4.1", "4.1.1","4.2", "dev"}:
-            self.method.xpath_text_click("返回")
+        if version in {"4.2", "4.3"}:
+            self.method.xpath_text_click(name="返回")
+        elif version in {"4.1", "4.1.1", "dev"}:
+            self.method.by_element_click(by_method=By.ID, locator="com.onyx.android.note:id/title_iv")
         elif version in {"4.0", "4.0.3", "4.0.2", "4.0.1"}:
-            self.method.by_element_click(element_key="通用操作.笔记内-标题图标")
+            self.method.by_element_click(by_method=By.ID, locator="com.onyx.android.note:id/title_iv")
         elif version == "3.5.4":
-            self.method.by_element_click(element_key="通用操作.笔记内-标题文本")
+            self.method.by_element_click(by_method=By.ID, locator="com.onyx:id/text_title")
         else:
             logging.info(f"请检查系统版本，缩略图点击返回元素无法判断，当前测试版本为：{version}")
             return False
 
-        self.method.by_element_click(element_key="通用操作.笔记内-返回按钮")
+        self.method.by_element_click(by_method=By.ID, locator="com.onyx.android.note:id/back_icon")
 
     def get_note(self, note_name, n):
+
         time.sleep(3)
-        subprocess.run(['adb', '-s', device_id, 'shell', 'am', 'force-stop', 'com.onyx.android.note'])
-        page_info = self.method.obtain_element_text(element_key="通用操作.笔记列表页码信息")
+        test = subprocess.run(['adb', '-s', device_id, 'shell', 'am', 'force-stop', 'com.onyx.android.note']) # type: ignore
+        # logging.info(f" 测试确认命令是否生效  {test}")
+
+        page_info = self.method.xpath_parent_click('//android.widget.TextView[@resource-id="com.onyx:id/page_info"]', should_click=False).text
+
         try:
             current_page, total_pages = map(int, page_info.split('/'))
         except (ValueError, AttributeError):
@@ -261,12 +260,15 @@ class Test_Render_Time:
                 element = wait.until(EC.element_to_be_clickable((By.XPATH, xpath_expression)))
                 time.sleep(1)
                 element.click()
-                return True
+                if self.method.xpath_parent_click('//android.widget.TextView[@text="模板"]', should_click=False):
+                    return True
+                else:
+                    return False
             except (TimeoutException, NoSuchElementException):
                 prev_page = current_page
                 self.method.click_slice(0.7, 0.5, 0.4, 0.5)
                 time.sleep(1)
-                page_info = self.method.obtain_element_text(element_key="通用操作.笔记列表页码信息")
+                page_info = self.method.xpath_parent_click('//android.widget.TextView[@resource-id="com.onyx:id/page_info"]', should_click=False).text
                 try:
                     current_page, total_pages = map(int, page_info.split('/'))
                 except (ValueError, AttributeError):
@@ -280,9 +282,9 @@ class Test_Render_Time:
 
     def get_file_note(self, note_name):
         time.sleep(2)
-        subprocess.run(['adb', '-s', device_id, 'shell', 'am', 'force-stop', 'com.onyx.android.note'])
+        subprocess.run(['adb', '-s', device_id, 'shell', 'am', 'force-stop', 'com.onyx.android.note']) # type: ignore
         time.sleep(1)
-        page_info = self.method.obtain_element_text(element_key="通用操作.文件管理页码信息")
+        page_info = self.method.xpath_parent_click('//android.widget.TextView[@resource-id="com.onyx:id/textView_page_info"]',should_click=False).text
         logging.debug(f"{page_info}")
         try:
             current_page, total_pages = map(int, page_info.split('/'))
@@ -301,7 +303,7 @@ class Test_Render_Time:
                 if total_pages != 1:
                     prev_page = current_page
                     self.method.click_slice(0.7, 0.5, 0.4, 0.5)
-                    page_info = self.method.obtain_element_text(element_key="通用操作.文件管理页码信息")
+                    page_info = self.method.xpath_parent_click('//android.widget.TextView[@resource-id="com.onyx:id/textView_page_info"]',should_click=False).text
                     try:
                         current_page, total_pages = map(int, page_info.split('/'))
                     except (ValueError, AttributeError):
@@ -319,7 +321,7 @@ class Test_Render_Time:
     def test_render_time(self, note_perf_initial):
         version_str = self.public.get_version(short=True)
 
-        if version_str in {"4.0", "4.1", "4.0.3", "4.0.2", "4.0.1", "4.1.1", "4.2", "dev"}:
+        if version_str in {"4.0", "4.1", "4.0.3", "4.0.2", "4.0.1", "4.1.1", "4.2", "4.3", "dev"}:
             open_note_logcat = ''' "render note page point count: " '''
         elif version_str == "3.5.4":
             open_note_logcat = ''' "RxBaseAction: com.onyx.android.note.note.action.render.RenderToSurfaceViewAction" '''
@@ -327,7 +329,7 @@ class Test_Render_Time:
             logging.info(f"请检查系统版本未设置指定版本日志匹配，当前测试版本为：{version_str}")
             return False
 
-        if version_str in {"4.0", "4.1", "4.0.3", "4.0.2", "4.0.1", "4.1.1", "4.2", "dev"}:
+        if version_str in {"4.0", "4.1", "4.0.3", "4.0.2", "4.0.1", "4.1.1", "4.2", "4.3","dev"}:
             note_page_up_logcat = ''' "render note page point count: " '''
         elif version_str == "3.5.4":
             note_page_up_logcat = ''' "RxBaseAction: com.onyx.android.note.note.action.page.PageNextAction" '''
@@ -335,7 +337,7 @@ class Test_Render_Time:
             logging.info(f"请检查系统版本未设置指定版本日志匹配，当前测试版本为：{version_str}")
             return False
 
-        if version_str in {"4.0", "4.1", "4.0.3", "4.0.2", "4.0.1", "4.1.1", "4.2", "dev"}:
+        if version_str in {"4.0", "4.1", "4.0.3", "4.0.2", "4.0.1", "4.1.1", "4.2", "4.3","dev"}:
             note_thumbnail_logcat = ''' render thumbnail note page point count: ,
                                         render note page thumbnail: '''
         elif version_str == "3.5.4":
@@ -353,7 +355,7 @@ class Test_Render_Time:
         logging.info(f"笔记内缩略图渲染捕捉日志:{note_thumbnail_logcat}")
 
         self.public.enter_storage()
-        self.method.by_name_click(element_key="设备相关.存储卷列表")
+        self.method.by_name_click(by_method=By.ID, locator="com.onyx:id/volume_name", name="存储")
         self.public.get_file(TEST_FILES_DISPLAY_ROOT, TEST_FILES_DIR_NOTE_RENDER)
 
         note_names = [
@@ -373,8 +375,7 @@ class Test_Render_Time:
             logging.info(f"==================================================")
 
         driver.press_keycode(3)
-        self.method.xpath_text_click(element_key="笔记首页.进入笔记首页")
-
+        self.public.enter_note_app()
 
         logging.info(f"--------------------测试场景：打开笔记------------------------")
         for note_name in note_names:

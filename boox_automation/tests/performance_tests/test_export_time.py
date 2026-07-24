@@ -15,14 +15,15 @@ from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from boox_automation.ui_ops.logcat import Logcat
 from boox_automation.driver import driver
-from boox_automation.devices.info import (
-    TEST_FILES_DISPLAY_ROOT, TEST_FILES_DIR_NOTE_EXPORT,
-)
-from boox_automation.ui_ops.operations import Operation_method
+from boox_automation.ui_ops.actions import Operation_method
 from boox_automation.tests.helpers import Public_method, device_region
 
 # 笔记导出格式
 old_version = ["矢量PDF", "位图PDF", ".note文件（BOOX笔记格式）"]
+
+# 设备端测试文件路径常量
+TEST_FILES_DISPLAY_ROOT = "笔记自动化测试文件"
+TEST_FILES_DIR_NOTE_EXPORT = "固件迭代测试项（笔记导出）"
 new_version = ["可编辑PDF", "不可编辑PDF", ".note文件（BOOX笔记格式）"]
 note_export_log = 'com.onyx.android.note.note.action.export.ExportNoteAction'
 
@@ -171,7 +172,7 @@ class Test_Note_Export_Time:
 
         version = self.public.get_version(short=True)
 
-        if version == "4.2":
+        if version == "4.2" or version == "4.3":
             for export_format in new_version:
                 # 长按笔记
                 self.method.wait_for_press_name(by_method="id", locator="com.onyx:id/title", name=test_note_name)
@@ -317,7 +318,7 @@ class Test_Note_Export_Time:
         time.sleep(3)
         self.method.wait_for_screen_size(start_screen_width=0.87, start_screen_height=0.03)
 
-        if version == "4.2":
+        if version == "4.2" or version == "4.3":
             for export_format in new_version:
                 self.method.xpath_parent_click(
                     xpath='(//android.widget.ImageView[@resource-id="com.onyx.android.note:id/menu_icon"])[7]'
@@ -340,15 +341,15 @@ class Test_Note_Export_Time:
                 )
 
         self.method.wait_for_screen_size(start_screen_width=0.08, start_screen_height=0.04)
-        self.method.by_element_click(element_key="通用操作.笔记内-返回按钮")
+        self.method.by_element_click(by_method=By.ID, locator="com.onyx.android.note:id/back_icon")
 
     @pytest.mark.cleanup_app_data
     @pytest.mark.cleanup_storage_files
     def test_note_export_time(self, note_perf_initial):
 
         self.public.enter_note_app()
-        self.method.xpath_text_click(element_key="笔记首页.无笔记状态创建按钮")
-        self.method.xpath_text_click(element_key="笔记首页.从本地文件导入")
+        self.method.xpath_text_click(name="创建笔记")
+        self.method.xpath_text_click(name="从本地文件")
         self.public.import_file_bootstrap("选择文件即可创建笔记", "知道了")
         self.public.import_file("笔记自动化测试文件", "固件迭代测试项（笔记导出）")
 
@@ -363,12 +364,12 @@ class Test_Note_Export_Time:
         self.method.xpath_text_click(name="手写线条(1)", should_click=False)
 
 
-        page_number = self.method.check_list_timeout(element_key="通用操作.笔记列表页码信息")
+        page_number = self.method.check_list_timeout(By.ID, "com.onyx:id/page_info")
         for ele in page_number:
             logging.debug(f"页码元素文本：{ele.text}")
 
         test_note = []
-        test_note_name_elements = self.method.check_list_timeout(element_key="通用操作.笔记标题列表")
+        test_note_name_elements = self.method.check_list_timeout(By.ID, "com.onyx:id/title")
         for element in test_note_name_elements:
             test_note.append(element.text)
         logging.debug(f"笔记名称列表：{test_note}")

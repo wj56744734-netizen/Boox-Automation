@@ -1,5 +1,8 @@
 """
-集中清理项目运行期产物：保留最近 N 轮 screenshots / logs。
+集中清理项目运行期产物：按文件修改时间 (mtime) 超期清理。
+
+12h TTL（运行产物）: screenshots, image_diff, reports, page_xml, logs, tmp
+24h TTL（缓存数据）: cache, baselines
 
 调用方式：
 - pytest 会话结束时自动调用 cleanup_artifacts()
@@ -10,62 +13,90 @@ from __future__ import annotations
 import logging
 import shutil
 import sys
+import time
 from pathlib import Path
 
 from boox_automation.core.paths import (
-    DEFAULT_KEEP_LATEST,
-    LOGS_ROOT,
     SCREENSHOTS_ROOT,
+    IMAGE_DIFF_ROOT,
+    REPORTS_ROOT,
+    PAGE_XML_ROOT,
+    CACHE_ROOT,
+    BASELINES_ROOT,
+    LOGS_ROOT,
     TMP_ROOT,
+    DOCS_ROOT,
+    CLEANUP_TTL_12H,
+    CLEANUP_TTL_24H,
 )
 
 logger = logging.getLogger(__name__)
 
+# baselines 下的元数据文件（不超期清理，始终保留）
+_BASELINE_META_FILES = {"entries.json", "index.json"}
 
-def _keep_latest(parent: Path, keep: int, dry_run: bool = False) -> tuple[int, int]:
-    """按 mtime 倒序保留最新 keep 个子项，返回 (删除条数, 删除字节)。"""
-    if not parent.exists():
+
+def _get_cleanup_targets() -> list[tuple[Path, int, str]]:
+    """返回清理目标列表，TTL 优先从 config.yaml 读取。"""
+    from boox_automation.core.config import cleanup_ttl_12h, cleanup_ttl_24h
+    ttl_12h = cleanup_ttl_12h()
+    ttl_24h = cleanup_ttl_24h()
+    return [
+        (SCREENSHOTS_ROOT, ttl_12h, "screenshots"),
+        (IMAGE_DIFF_ROOT, ttl_12h, "image_diff"),
+        (REPORTS_ROOT, ttl_12h, "reports"),
+        (PAGE_XML_ROOT, ttl_12h, "page_xml"),
+        (LOGS_ROOT, ttl_12h, "logs"),
+        (DOCS_ROOT, ttl_12h, "docs"),
+        (CACHE_ROOT, ttl_24h, "cache"),
+        (BASELINES_ROOT, ttl_24h, "baselines"),
+    ]
+
+
+def _cleanup_dir(root: Path, ttl_seconds: int, dry_run: bool = False,
+                 skip_files: set | None = None) -> tuple[int, int]:
+    """递归删除 root 下 mtime 超过 ttl 的文件和空目录。
+
+    Returns:
+        (删除文件数, 释放字节数)
+    """
+    if not root.exists():
         return 0, 0
-    entries = sorted(
-        (p for p in parent.iterdir() if not p.name.startswith(".")),
-        key=lambda p: p.stat().st_mtime,
-        reverse=True,
-    )
-    to_delete = entries[keep:]
-    if not to_delete:
-        return 0, 0
-    if dry_run:
-        total_size = 0
-        for path in to_delete:
-            size = _dir_size(path) if path.is_dir() else path.stat().st_size
-            total_size += size
-            logger.info(f"[DRY RUN] 将删除: {path} ({_format_size(size)})")
-        return len(to_delete), total_size
+
+    now = time.time()
+    deadline = now - ttl_seconds
+    skip = skip_files or set()
     removed = 0
     freed = 0
-    for path in to_delete:
+
+    # 先删过期文件
+    for f in root.rglob("*"):
+        if not f.is_file():
+            continue
+        if f.name in skip:
+            continue
         try:
-            size = _dir_size(path) if path.is_dir() else path.stat().st_size
-            if path.is_dir():
-                shutil.rmtree(path, ignore_errors=True)
-            else:
-                path.unlink(missing_ok=True)
-            removed += 1
-            freed += size
-        except Exception as e:
-            logger.warning(f"删除失败 {path}: {e}")
+            if f.stat().st_mtime < deadline:
+                size = f.stat().st_size
+                if dry_run:
+                    logger.info(f"[DRY RUN] 将删除: {f}")
+                else:
+                    f.unlink(missing_ok=True)
+                removed += 1
+                freed += size
+        except OSError:
+            pass
+
+    # 清理空目录（自底向上）
+    if not dry_run:
+        for d in sorted(root.rglob("*"), key=lambda p: len(str(p)), reverse=True):
+            if d.is_dir() and not any(d.iterdir()):
+                try:
+                    d.rmdir()
+                except OSError:
+                    pass
+
     return removed, freed
-
-
-def _dir_size(path: Path) -> int:
-    total = 0
-    for sub in path.rglob("*"):
-        if sub.is_file():
-            try:
-                total += sub.stat().st_size
-            except OSError:
-                pass
-    return total
 
 
 def _format_size(num: int) -> str:
@@ -78,22 +109,23 @@ def _format_size(num: int) -> str:
     return f"{n:.1f}TB"
 
 
-def cleanup_artifacts(keep_latest: int = DEFAULT_KEEP_LATEST, dry_run: bool = False) -> dict:
-    """对各分类目录按 keep_latest 策略清理；返回每类统计。"""
-    targets = {
-        "screenshots": SCREENSHOTS_ROOT,
-        "logs": LOGS_ROOT,
-    }
+def cleanup_artifacts(dry_run: bool = False) -> dict:
+    """按 TTL 清理各分类目录；返回每类统计。"""
     summary: dict = {}
-    for name, parent in targets.items():
-        removed, freed = _keep_latest(parent, keep_latest, dry_run=dry_run)
+
+    for root, ttl, name in _get_cleanup_targets():
+        skip = _BASELINE_META_FILES if root == BASELINES_ROOT else None
+        removed, freed = _cleanup_dir(root, ttl, dry_run=dry_run, skip_files=skip)
         if removed:
             tag = "[DRY RUN]" if dry_run else "[artifacts]"
             logger.info(f"{tag} 清理 {name}：删除 {removed} 项，释放 {_format_size(freed)}")
         summary[name] = {"removed": removed, "freed_bytes": freed}
-    # tmp 目录单独处理：全清
+
+    # tmp 目录特殊处理：全清（不判断 mtime）
     if TMP_ROOT.exists():
-        freed = _dir_size(TMP_ROOT)
+        freed = sum(
+            f.stat().st_size for f in TMP_ROOT.rglob("*") if f.is_file()
+        )
         if dry_run:
             logger.info(f"[DRY RUN] tmp：将删除目录，释放 {_format_size(freed)}")
         else:
@@ -103,6 +135,7 @@ def cleanup_artifacts(keep_latest: int = DEFAULT_KEEP_LATEST, dry_run: bool = Fa
         summary["tmp"] = {"removed": 1, "freed_bytes": freed}
     else:
         summary["tmp"] = {"removed": 0, "freed_bytes": 0}
+
     return summary
 
 
